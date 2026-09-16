@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, FolderClosed, Footprints, Users, ArchiveRestore, Sparkles } from 'lucide-react'
+import { Home, MessageSquare, Send, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, FolderClosed, Footprints, Users, ArchiveRestore, Sparkles } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import * as configService from '../services/config'
 import { onExportSessionStatus, requestExportSessionStatus } from '../services/exportBridge'
@@ -333,6 +333,15 @@ function Sidebar({ collapsed }: SidebarProps) {
           >
             <span className="nav-icon"><MessageSquare size={20} /></span>
             <span className="nav-label">聊天</span>
+          </NavLink>
+
+          <NavLink
+            to="/telegram"
+            className={`nav-item ${isActive('/telegram') ? 'active' : ''}`}
+            title={collapsed ? 'Telegram' : undefined}
+          >
+            <span className="nav-icon"><Send size={20} /></span>
+            <span className="nav-label">Telegram</span>
           </NavLink>
 
           {/* 朋友圈 */}

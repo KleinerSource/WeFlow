@@ -134,7 +134,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     respondCloseConfirm: (action: 'tray' | 'quit' | 'cancel') =>
       ipcRenderer.invoke('window:respondCloseConfirm', action),
     openAgreementWindow: () => ipcRenderer.invoke('window:openAgreementWindow'),
-    completeOnboarding: () => ipcRenderer.invoke('window:completeOnboarding'),
+    completeOnboarding: (destination?: 'telegram') => ipcRenderer.invoke('window:completeOnboarding', destination),
     openOnboardingWindow: (options?: { mode?: 'add-account' }) => ipcRenderer.invoke('window:openOnboardingWindow', options),
     setTitleBarOverlay: (options: { symbolColor: string }) => ipcRenderer.send('window:setTitleBarOverlay', options),
     openVideoPlayerWindow: (videoPath: string, videoWidth?: number, videoHeight?: number) =>
@@ -682,5 +682,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
   social: {
     saveWeiboCookie: (rawInput: string) => ipcRenderer.invoke('social:saveWeiboCookie', rawInput),
     validateWeiboUid: (uid: string) => ipcRenderer.invoke('social:validateWeiboUid', uid)
+  },
+  telegram: {
+    status: () => ipcRenderer.invoke('telegram:status'),
+    sources: () => ipcRenderer.invoke('telegram:sources'),
+    restore: () => ipcRenderer.invoke('telegram:restore'),
+    login: (apiId: number, apiHash: string, phone: string) => ipcRenderer.invoke('telegram:login', apiId, apiHash, phone),
+    submitAuth: (step: string, value: string) => ipcRenderer.invoke('telegram:submitAuth', step, value),
+    cancelAuth: () => ipcRenderer.invoke('telegram:cancelAuth'),
+    logout: () => ipcRenderer.invoke('telegram:logout'),
+    refresh: () => ipcRenderer.invoke('telegram:refresh'),
+    messages: (sourceId: string, chatId: string) => ipcRenderer.invoke('telegram:messages', sourceId, chatId),
+    loadMessages: (chatId: string, older: boolean) => ipcRenderer.invoke('telegram:loadMessages', chatId, older),
+    downloadMedia: (chatId: string, messageId: number) => ipcRenderer.invoke('telegram:downloadMedia', chatId, messageId),
+    syncAll: () => ipcRenderer.invoke('telegram:syncAll'),
+    cancelSync: () => ipcRenderer.invoke('telegram:cancelSync'),
+    importJson: () => ipcRenderer.invoke('telegram:import'),
+    removeImport: (sourceId: string) => ipcRenderer.invoke('telegram:removeImport', sourceId),
+    exportChat: (sourceId: string, chatId: string, format: 'json' | 'csv' | 'md') => ipcRenderer.invoke('telegram:export', sourceId, chatId, format),
+    onAuthStep: (callback: (step: string) => void) => {
+      const listener = (_: unknown, step: string) => callback(step)
+      ipcRenderer.on('telegram:auth-step', listener)
+      return () => ipcRenderer.removeListener('telegram:auth-step', listener)
+    },
+    onAuthError: (callback: (message: string) => void) => {
+      const listener = (_: unknown, message: string) => callback(message)
+      ipcRenderer.on('telegram:auth-error', listener)
+      return () => ipcRenderer.removeListener('telegram:auth-error', listener)
+    },
+    onChanged: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('telegram:changed', listener)
+      return () => ipcRenderer.removeListener('telegram:changed', listener)
+    },
+    onProgress: (callback: (progress: unknown) => void) => {
+      const listener = (_: unknown, progress: unknown) => callback(progress)
+      ipcRenderer.on('telegram:progress', listener)
+      return () => ipcRenderer.removeListener('telegram:progress', listener)
+    }
   }
 })

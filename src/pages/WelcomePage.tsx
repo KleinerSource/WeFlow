@@ -5,7 +5,7 @@ import { dialog } from '../services/ipc'
 import * as configService from '../services/config'
 import {
   ArrowLeft, ArrowRight, CheckCircle2, Database, Eye, EyeOff,
-  FolderOpen, FolderSearch, KeyRound, ShieldCheck, Sparkles,
+  FolderOpen, FolderSearch, KeyRound, Send, ShieldCheck, Sparkles,
   UserRound, Wand2, Minus, X, HardDrive, RotateCcw
 } from 'lucide-react'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -715,6 +715,23 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
     setStepIndex((prev) => Math.max(prev - 1, 0))
   }
 
+  const handleUseTelegram = async () => {
+    setIsConnecting(true)
+    setError('')
+    try {
+      if (standalone) {
+        await window.electronAPI.window.completeOnboarding('telegram')
+      } else {
+        await configService.setOnboardingDone(true)
+        navigate('/telegram')
+      }
+    } catch (e) {
+      setError(`进入 Telegram 失败: ${e}`)
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
   const handleConnect = async () => {
     if (isAddAccountMode && !hasReacquiredDbKey) {
       setError('请先在当前流程中自动获取一次数据库密钥')
@@ -1201,23 +1218,29 @@ function WelcomePage({ standalone = false }: WelcomePageProps) {
 
           {currentStep.id === 'intro' && (
             <div className="intro-footer">
-              <p>接下来的几个步骤将引导你连接本地微信数据库。</p>
-              <p>WeFlow 需要访问你的本地数据文件以提供分析与导出功能。</p>
+              <p>选择微信或 Telegram 开始使用。</p>
+              <p>微信数据库可以稍后配置。</p>
             </div>
           )}
 
           <div className="content-actions">
-            <button className="btn btn-ghost" onClick={handleBack} disabled={stepIndex === 0 || isAddAccountMode}>
+            <button className="btn btn-ghost" onClick={handleBack} disabled={stepIndex === 0 || isAddAccountMode || isConnecting}>
               <ArrowLeft size={16} /> 上一步
             </button>
+
+            {currentStep.id === 'intro' && !isAddAccountMode && (
+              <button className="btn btn-secondary" onClick={handleUseTelegram} disabled={isConnecting}>
+                <Send size={16} /> 使用 Telegram
+              </button>
+            )}
 
             {isAddAccountMode ? (
               <button className="btn btn-primary" onClick={handleConnect} disabled={isConnecting || !canGoNext()}>
                 {isConnecting ? '连接中...' : '完成并返回'} <ArrowRight size={16} />
               </button>
             ) : stepIndex < steps.length - 1 ? (
-              <button className="btn btn-primary" onClick={handleNext} disabled={!canGoNext()}>
-                下一步 <ArrowRight size={16} />
+              <button className="btn btn-primary" onClick={handleNext} disabled={isConnecting || !canGoNext()}>
+                {currentStep.id === 'intro' ? '配置微信' : '下一步'} <ArrowRight size={16} />
               </button>
             ) : (
               <button className="btn btn-primary" onClick={handleConnect} disabled={isConnecting || !canGoNext()}>

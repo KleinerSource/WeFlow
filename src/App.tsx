@@ -24,6 +24,7 @@ import { resolveAutomationScopeKey } from './pages/Export/hooks/useAutomation'
 // 显著降低每个渲染进程的 JS 堆占用与启动时间
 const WelcomePage = lazy(() => import('./pages/WelcomePage'))
 const ChatPage = lazy(() => import('./pages/ChatPage'))
+const TelegramPage = lazy(() => import('./pages/TelegramPage'))
 const AnalyticsWelcomePage = lazy(() => import('./pages/AnalyticsWelcomePage'))
 const ChatAnalyticsHubPage = lazy(() => import('./pages/ChatAnalyticsHubPage'))
 const AgreementPage = lazy(() => import('./pages/AgreementPage'))
@@ -778,6 +779,7 @@ function App() {
                 <Route path="/home" element={<HomePage />} />
                 <Route path="/account-management" element={<AccountManagementPage />} />
                 <Route path="/chat" element={<ChatPage />} />
+                <Route path="/telegram" element={<TelegramPage />} />
 
                 <Route path="/analytics" element={<ChatAnalyticsHubPage />} />
                 <Route path="/analytics/private" element={<AnalyticsWelcomePage />} />

@@ -17,6 +17,9 @@ import { snsService } from './snsService'
 import * as os from 'os'
 import { ApiMessageMapperPool } from './apiMessageMapperPool'
 import { mapRowsToMessagesLite } from './apiMessageMapping'
+import { telegramService } from './telegramService'
+import { listTelegramSessions, pageTelegramMessages, publicTelegramMessages, toTelegramChatLab } from './telegramHttp'
+import type { TelegramSource } from '../../shared/telegram'
 
 // ChatLab 格式定义
 interface ChatLabHeader {
@@ -464,6 +467,16 @@ class HttpService {
 
             if (pathname === '/health' || pathname === '/api/v1/health') {
                 this.sendJson(res, { status: 'ok' })
+            } else if (pathname === '/api/v1/telegram/sources') {
+                if (req.method !== 'GET') return this.sendMethodNotAllowed(res, 'GET')
+                const sources = await telegramService.getStore().listSources()
+                this.sendJson(res, {
+                    success: true,
+                    count: sources.length,
+                    sources: sources.map(({ id, label, kind, chats }) => ({ id, label, kind, chatCount: chats.length }))
+                })
+            } else if (pathname.startsWith('/api/v1/telegram/sources/')) {
+                await this.handleTelegramRequest(req.method, pathname, url, res)
             } else if (pathname === '/api/v1/push/messages') {
                 this.handleMessagePushStream(req, res, url)
             } else if (pathname === '/api/v1/messages') {
@@ -1038,6 +1051,93 @@ class HttpService {
     if (lowered.includes('@openim')) return 'channel'
     if (lowered.startsWith('weixin') && lowered !== 'weixin') return 'channel'
     return 'private'
+  }
+
+  private async handleTelegramRequest(method: string | undefined, pathname: string, url: URL, res: http.ServerResponse): Promise<void> {
+    const parts = pathname.slice('/api/v1/telegram/sources/'.length).split('/')
+    let sourceId: string
+    try {
+      sourceId = decodeURIComponent(parts[0])
+    } catch {
+      return this.sendError(res, 400, 'Invalid Telegram source ID')
+    }
+    if (sourceId !== 'live' && !/^import-[a-f0-9-]{36}$/.test(sourceId)) {
+      return this.sendError(res, 400, 'Invalid Telegram source ID')
+    }
+    const source = await telegramService.getStore().getSource(sourceId)
+    if (!source) return this.sendError(res, 404, 'Telegram source not found')
+
+    if (parts.length === 2 && parts[1] === 'sessions') {
+      if (method !== 'GET' && method !== 'POST') return this.sendMethodNotAllowed(res, 'GET, POST')
+      const format = (url.searchParams.get('format') || 'json').trim().toLowerCase()
+      if (format !== 'json' && format !== 'chatlab') return this.sendError(res, 400, 'Invalid format, supported: json/chatlab')
+      this.sendJson(res, listTelegramSessions(source, url.searchParams.get('keyword') || '',
+        this.parseIntParam(url.searchParams.get('limit'), 100, 1, 10000), format === 'chatlab'))
+      return
+    }
+
+    let chatId: string
+    const isPull = parts.length === 4 && parts[1] === 'sessions' && parts[3] === 'messages'
+    if (isPull) {
+      if (method !== 'GET') return this.sendMethodNotAllowed(res, 'GET')
+      try {
+        chatId = decodeURIComponent(parts[2])
+      } catch {
+        return this.sendError(res, 400, 'Invalid Telegram chat ID')
+      }
+    } else if (parts.length === 2 && parts[1] === 'messages') {
+      if (method !== 'GET' && method !== 'POST') return this.sendMethodNotAllowed(res, 'GET, POST')
+      chatId = url.searchParams.get('talker') || ''
+      if (!chatId) return this.sendError(res, 400, 'Missing required parameter: talker')
+      const format = (url.searchParams.get('format') || (this.parseBooleanParam(url, ['chatlab'], false) ? 'chatlab' : 'json')).trim().toLowerCase()
+      if (format !== 'json' && format !== 'chatlab') return this.sendError(res, 400, 'Invalid format, supported: json/chatlab')
+    } else {
+      return this.sendError(res, 404, 'Not Found')
+    }
+
+    await this.handleTelegramMessages(source, chatId, url, res, isPull)
+  }
+
+  private async handleTelegramMessages(source: TelegramSource, chatId: string, url: URL, res: http.ServerResponse, isPull: boolean): Promise<void> {
+    if (this.parseBooleanParam(url, ['media', 'meiti'], false)) return this.sendError(res, 400, 'Telegram media export is not supported by HTTP API')
+    const chat = source.chats.find(item => item.id === chatId)
+    if (!chat) return this.sendError(res, 404, 'Telegram chat not found')
+    const limit = this.parseIntParam(url.searchParams.get('limit'), isPull ? 5000 : 100, 1, isPull ? 5000 : 10000)
+    const offset = this.parseIntParam(url.searchParams.get('offset'), 0, 0, Number.MAX_SAFE_INTEGER)
+    const messages = await telegramService.getStore().getMessages(source.id, chatId)
+    const page = pageTelegramMessages(messages, {
+      start: this.parseTimeParam(url.searchParams.get(isPull ? 'since' : 'start')),
+      end: this.parseTimeParam(url.searchParams.get('end'), true),
+      keyword: isPull ? undefined : url.searchParams.get('keyword') || '',
+      offset,
+      limit,
+      ascending: isPull
+    })
+
+    const format = (url.searchParams.get('format') || (this.parseBooleanParam(url, ['chatlab'], false) ? 'chatlab' : 'json')).trim().toLowerCase()
+    if (isPull || format === 'chatlab') {
+      const data = toTelegramChatLab(source, chat, page.messages)
+      this.sendJson(res, isPull ? {
+        ...data,
+        sync: {
+          hasMore: page.hasMore,
+          nextSince: page.hasMore ? page.messages.at(-1)?.date : undefined,
+          nextOffset: page.hasMore ? offset + page.messages.length : undefined,
+          watermark: Math.floor(Date.now() / 1000),
+          complete: chat.complete
+        }
+      } : { ...data, complete: chat.complete, media: { enabled: false, count: 0 } })
+      return
+    }
+    this.sendJson(res, {
+      success: true,
+      sourceId: source.id,
+      talker: chatId,
+      count: page.messages.length,
+      hasMore: page.hasMore,
+      complete: chat.complete,
+      messages: publicTelegramMessages(page.messages)
+    })
   }
 
   private async handleMessages(url: URL, res: http.ServerResponse): Promise<void> {

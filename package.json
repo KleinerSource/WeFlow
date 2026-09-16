@@ -17,6 +17,7 @@
     "rebuild": "electron-rebuild",
     "dev": "node scripts/prepare-electron-runtime.cjs && vite",
     "typecheck": "tsc --noEmit",
+    "test:telegram": "node --test electron/services/telegram.test.mjs",
     "build": "node scripts/clean-dist-electron.cjs && tsc && vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "node scripts/prepare-electron-runtime.cjs && vite --mode electron",
@@ -45,6 +46,7 @@
     "remark-gfm": "^4.0.1",
     "sherpa-onnx-node": "^1.13.3",
     "silk-wasm": "^3.7.1",
+    "teleproto": "^1.229.0",
     "wechat-emojis": "^1.0.2",
     "zustand": "^5.0.14"
   },

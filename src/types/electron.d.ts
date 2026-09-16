@@ -1,5 +1,7 @@
 ﻿import type { ChatSession, Message, Contact, ContactInfo, ChatRecordItem } from './models'
 
+import type { TelegramAuthStep, TelegramMessage, TelegramProgress, TelegramSource, TelegramStatus } from '../../shared/telegram'
+
 export interface SessionChatWindowOpenOptions {
   source?: 'chat' | 'export'
   initialDisplayName?: string
@@ -314,6 +316,28 @@ export type CloseConfirmPayload = {
 }
 
 export interface ElectronAPI {
+  telegram: {
+    status: () => Promise<TelegramStatus>
+    sources: () => Promise<TelegramSource[]>
+    restore: () => Promise<boolean>
+    login: (apiId: number, apiHash: string, phone: string) => Promise<void>
+    submitAuth: (step: TelegramAuthStep, value: string) => Promise<void>
+    cancelAuth: () => Promise<void>
+    logout: () => Promise<void>
+    refresh: () => Promise<void>
+    messages: (sourceId: string, chatId: string) => Promise<TelegramMessage[]>
+    loadMessages: (chatId: string, older: boolean) => Promise<TelegramMessage[]>
+    downloadMedia: (chatId: string, messageId: number) => Promise<string>
+    syncAll: () => Promise<void>
+    cancelSync: () => Promise<void>
+    importJson: () => Promise<string | null>
+    removeImport: (sourceId: string) => Promise<void>
+    exportChat: (sourceId: string, chatId: string, format: 'json' | 'csv' | 'md') => Promise<boolean>
+    onAuthStep: (callback: (step: TelegramAuthStep) => void) => () => void
+    onAuthError: (callback: (message: string) => void) => () => void
+    onChanged: (callback: () => void) => () => void
+    onProgress: (callback: (progress: TelegramProgress) => void) => () => void
+  }
   window: {
     minimize: () => void
     maximize: () => void
@@ -323,7 +347,7 @@ export interface ElectronAPI {
     onCloseConfirmRequested: (callback: (payload: CloseConfirmPayload) => void) => () => void
     respondCloseConfirm: (action: 'tray' | 'quit' | 'cancel') => Promise<boolean>
     openAgreementWindow: () => Promise<boolean>
-    completeOnboarding: () => Promise<boolean>
+    completeOnboarding: (destination?: 'telegram') => Promise<boolean>
     openOnboardingWindow: (options?: { mode?: 'add-account' }) => Promise<boolean>
     setTitleBarOverlay: (options: { symbolColor: string }) => void
     openVideoPlayerWindow: (videoPath: string, videoWidth?: number, videoHeight?: number) => Promise<void>

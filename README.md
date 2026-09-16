@@ -75,6 +75,17 @@ WeFlow 提供本地 HTTP API 服务，支持通过接口查询消息数据，可
 
 完整接口文档：[点击查看](docs/HTTP-API.md)
 
+Telegram 在线缓存及 Desktop JSON 导入数据也可通过受 Token 保护的只读接口查询；使用 `/api/v1/telegram/sources` 获取数据源，再查询该源的会话和消息。原微信 HTTP 接口保持不变。
+
+## Telegram 数据源
+
+侧边栏的 **Telegram** 与微信数据独立，可以在没有微信数据库连接时使用。支持两种本地数据来源：
+
+- **账号同步**：在 [my.telegram.org](https://my.telegram.org/) 创建应用并取得 API ID / API Hash，在 Telegram 页面输入手机号、验证码及需要的两步验证。登录后会实时接收新消息；打开会话时按需补取历史。需要完整统计或导出时，先点击“同步全部历史”。
+- **Desktop JSON 导入**：在 Telegram Desktop 导出聊天记录时选择 JSON，然后在 Telegram 页面导入 `result.json`。支持全部聊天或单个聊天导出；导入的数据不会自动更新，媒体文件仍从原导出目录打开，请保留该目录。
+
+Telegram 页面提供聊天、已同步消息的基础统计，以及 JSON / CSV / Markdown 导出。微信专属的朋友圈、年度报告等功能不适用于 Telegram。账号会话仅在系统提供安全加密存储时持久保存；验证码和两步验证密码不会保存。
+
 ## 面向开发者
 
 如果你想从源码构建或为项目贡献代码，请遵循以下步骤：

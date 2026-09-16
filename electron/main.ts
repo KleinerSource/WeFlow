@@ -1,5 +1,5 @@
 import './preload-env'
-import { app, BrowserWindow, ipcMain, nativeTheme, session, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, session, Tray, Menu, nativeImage } from 'electron'
 import { Worker } from 'worker_threads'
 import { randomUUID } from 'crypto'
 import { join, dirname } from 'path'
@@ -38,6 +38,8 @@ import { normalizeWeiboCookieInput, weiboService } from './services/social/weibo
 import { bizService } from './services/bizService'
 import { backupService } from './services/backupService'
 import { imageDownloadService } from './services/imageDownloadService'
+import { telegramService } from './services/telegramService'
+import type { TelegramAuthStep } from '../shared/telegram'
 
 // 屏幕采集去节流（仅影响通知玻璃的 Chromium 流回退管线；Windows 主路径为
 // 原生面板渲染，不经过 Chromium 采集）：默认桌面采集 CPU 预算限制在 50%，
@@ -2000,6 +2002,43 @@ function registerIpcHandlers() {
   registerNotificationHandlers()
   ensureNotificationNavigateHandlerRegistered()
   bizService.registerHandlers()
+  ipcMain.handle('telegram:status', () => telegramService.status())
+  ipcMain.handle('telegram:sources', () => telegramService.getStore().listSources())
+  ipcMain.handle('telegram:restore', () => telegramService.restore())
+  ipcMain.handle('telegram:login', (_, apiId: number, apiHash: string, phone: string) => telegramService.login(apiId, apiHash, phone))
+  ipcMain.handle('telegram:submitAuth', (_, step: TelegramAuthStep, value: string) => telegramService.submitAuth(step, value))
+  ipcMain.handle('telegram:cancelAuth', () => telegramService.cancelAuth())
+  ipcMain.handle('telegram:logout', () => telegramService.logout())
+  ipcMain.handle('telegram:refresh', () => telegramService.refreshDialogs())
+  ipcMain.handle('telegram:messages', (_, sourceId: string, chatId: string) => telegramService.getStore().getMessages(sourceId, chatId))
+  ipcMain.handle('telegram:loadMessages', (_, chatId: string, older: boolean) => telegramService.loadMessages(chatId, older))
+  ipcMain.handle('telegram:downloadMedia', (_, chatId: string, messageId: number) => telegramService.downloadMedia(chatId, messageId))
+  ipcMain.handle('telegram:syncAll', () => telegramService.syncAll())
+  ipcMain.handle('telegram:cancelSync', () => telegramService.cancelSync())
+  ipcMain.handle('telegram:import', async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Telegram JSON', extensions: ['json'] }] })
+    return result.canceled || !result.filePaths[0] ? null : telegramService.importJson(result.filePaths[0])
+  })
+  ipcMain.handle('telegram:removeImport', (_, sourceId: string) => telegramService.getStore().removeImport(sourceId))
+  ipcMain.handle('telegram:export', async (_, sourceId: string, chatId: string, format: 'json' | 'csv' | 'md') => {
+    if (!['json', 'csv', 'md'].includes(format)) throw new Error('不支持的导出格式')
+    const source = await telegramService.getStore().getSource(sourceId)
+    const chats = chatId === '*' ? source?.chats : source?.chats.filter(item => item.id === chatId)
+    if (!source || !chats?.length) throw new Error('会话不存在')
+    const fileTitle = chatId === '*' ? `Telegram-${source.label}` : chats[0].title
+    const result = await dialog.showSaveDialog({ defaultPath: `${fileTitle.replace(/[\\/:*?"<>|]/g, '_')}.${format}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })
+    if (result.canceled || !result.filePath) return false
+    const records = await Promise.all(chats.map(async chat => ({ chat, messages: await telegramService.getStore().getMessages(sourceId, chat.id) })))
+    const csv = (value: string | number) => {
+      const text = String(value)
+      return `"${(/^[\s]*[=+\-@]/.test(text) ? `'${text}` : text).replace(/"/g, '""')}"`
+    }
+    const output = format === 'json' ? JSON.stringify(chatId === '*' ? { source: source.label, chats: records } : records[0], null, 2)
+      : format === 'csv' ? '\ufeff会话,日期,发送者,类型,内容\n' + records.flatMap(({ chat, messages }) => messages.map(message => [chat.title, new Date(message.date * 1000).toISOString(), message.sender, message.kind, message.text].map(csv).join(','))).join('\n')
+        : records.map(({ chat, messages }) => `# ${chat.title}\n\n` + messages.map(message => `### ${new Date(message.date * 1000).toLocaleString('zh-CN')} · ${message.sender || '未知'}\n\n${message.text || `[${message.kind}]`}\n`).join('\n')).join('\n')
+    await writeFile(result.filePath, output, 'utf8')
+    return true
+  })
   // 配置相关
   ipcMain.handle('config:get', async (_, key: string) => {
     return configService?.get(key as any)
@@ -4054,7 +4093,14 @@ function registerIpcHandlers() {
   })
 
   // 完成引导，关闭引导窗口并显示主窗口
-  ipcMain.handle('window:completeOnboarding', async () => {
+  ipcMain.handle('window:completeOnboarding', async (_, destination?: 'telegram') => {
+    if (destination === 'telegram' && mainWindow && !mainWindow.isDestroyed()) {
+      if (process.env.VITE_DEV_SERVER_URL) {
+        await mainWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/telegram`)
+      } else {
+        await mainWindow.loadFile(join(__dirname, '../dist/index.html'), { hash: '/telegram' })
+      }
+    }
     try {
       configService?.set('onboardingDone', true)
     } catch (e) {
@@ -4619,6 +4665,7 @@ app.whenReady().then(async () => {
   updateSplashProgress(20, '正在准备主窗口...')
   ensureWeChatRequestHeaderInterceptor()
   mainWindow = createWindow({ autoShow: false })
+  void telegramService.restore().catch(error => console.warn('[Telegram] 自动恢复失败:', error))
 
   const resolvedTrayIcon = resolveAppIconPath()
 
@@ -4780,6 +4827,7 @@ const shutdownAppServices = async (): Promise<void> => {
     try { await httpService.stop() } catch {}
     // 终止 wcdb Worker 线程，避免线程阻止进程退出
     try { await wcdbService.shutdown() } catch {}
+    try { await telegramService.shutdown() } catch {}
   })()
   return shutdownPromise
 }
