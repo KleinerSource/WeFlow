@@ -2,6 +2,20 @@ import type { TelegramChat, TelegramMessage, TelegramSource } from '../../shared
 
 type ChatLabSessionType = 'group' | 'private' | 'channel' | 'other'
 
+export function telegramPullSessionId(sourceId: string, chatId: string): string {
+  return `tg.${sourceId}.${Buffer.from(chatId, 'utf8').toString('base64url')}`
+}
+
+export function parseTelegramPullSessionId(id: string): { sourceId: string; chatId: string } | null {
+  const match = /^tg\.(live|import-[a-f0-9-]{36})\.([A-Za-z0-9_-]+)$/.exec(id)
+  if (!match) return null
+  const bytes = Buffer.from(match[2], 'base64url')
+  const chatId = bytes.toString('utf8')
+  if (!chatId || bytes.length > 1024 || bytes.toString('base64url') !== match[2]
+    || !Buffer.from(chatId, 'utf8').equals(bytes)) return null
+  return { sourceId: match[1], chatId }
+}
+
 export function telegramSessionType(kind: string): ChatLabSessionType {
   if (kind === 'channel' || kind === 'public_channel') return 'channel'
   if (kind === 'group' || kind === 'private_group' || kind === 'public_group' || kind === 'supergroup') return 'group'
@@ -9,22 +23,28 @@ export function telegramSessionType(kind: string): ChatLabSessionType {
   return 'other'
 }
 
-export function listTelegramSessions(source: TelegramSource, keyword: string, limit: number, chatlab: boolean) {
+export function telegramChatLabSessions(source: TelegramSource, keyword: string, limit: number, sessionId = (id: string) => id) {
   const query = keyword.toLocaleLowerCase()
   const chats = source.chats.filter(chat =>
     chat.id.toLocaleLowerCase().includes(query) || chat.title.toLocaleLowerCase().includes(query)
   ).slice(0, limit)
-  if (chatlab) {
-    return { sessions: chats.map(chat => ({
-      id: chat.id,
-      name: chat.title,
-      platform: 'telegram',
-      type: telegramSessionType(chat.kind),
-      messageCount: chat.messageCount,
-      lastMessageAt: chat.lastMessageAt,
-      complete: chat.complete
-    })) }
-  }
+  return chats.map(chat => ({
+    id: sessionId(chat.id),
+    name: chat.title,
+    platform: 'telegram',
+    type: telegramSessionType(chat.kind),
+    messageCount: chat.messageCount,
+    lastMessageAt: chat.lastMessageAt,
+    complete: chat.complete
+  }))
+}
+
+export function listTelegramSessions(source: TelegramSource, keyword: string, limit: number, chatlab: boolean) {
+  if (chatlab) return { sessions: telegramChatLabSessions(source, keyword, limit) }
+  const query = keyword.toLocaleLowerCase()
+  const chats = source.chats.filter(chat =>
+    chat.id.toLocaleLowerCase().includes(query) || chat.title.toLocaleLowerCase().includes(query)
+  ).slice(0, limit)
   return { success: true, sourceId: source.id, count: chats.length, sessions: chats }
 }
 

@@ -32,8 +32,11 @@ test('Telegram HTTP API 使用现有鉴权并隔离导入源', async () => {
     const chat = { id: 'private_group:42', title: '测试群', kind: 'private_group', lastMessageAt: 102, unreadCount: 0, messageCount: 3, complete: true }
     const sourceId = await store.importExport('测试导入', profile, [{ chat, messages: [
       { id: 1, date: 100, sender: '甲', text: '第一条', kind: 'text', outgoing: false },
-      { id: 2, date: 101, sender: '乙', text: '第二条', kind: 'photo', outgoing: false, mediaPath: join(profile, 'private.jpg') },
+      { id: 2, date: 100, sender: '乙', text: '第二条', kind: 'photo', outgoing: false, mediaPath: join(profile, 'private.jpg') },
       { id: 3, date: 102, sender: '甲', text: '第三条', kind: 'text', outgoing: false }
+    ] }])
+    const otherSourceId = await store.importExport('另一份导入', profile, [{ chat: { ...chat, title: '对照群' }, messages: [
+      { id: 9, date: 103, sender: '丙', text: '另一份记录', kind: 'text', outgoing: false }
     ] }])
     await writeFile(join(profile, 'WeFlow-config.json'), JSON.stringify({
       onboardingDone: true,
@@ -78,10 +81,45 @@ test('Telegram HTTP API 使用现有鉴权并隔离导入源', async () => {
       return { status: response.status, body: await response.json() }
     }
     assert.equal((await fetch(`${base}/api/v1/telegram/sources`)).status, 401)
+    assert.equal((await fetch(`${base}/api/v1/sessions?format=chatlab`)).status, 401)
     const sources = await request('/api/v1/telegram/sources')
     assert.equal(sources.status, 200)
-    assert.equal(sources.body.sources[0].id, sourceId)
-    assert.equal(sources.body.sources[0].chatCount, 1)
+    assert.equal(sources.body.sources.length, 2)
+    assert.equal(sources.body.sources.find(item => item.id === sourceId).chatCount, 1)
+    assert.equal(sources.body.sources.find(item => item.id === otherSourceId).chatCount, 1)
+
+    const checked = await request('/api/v1/sessions?format=chatlab&limit=1')
+    assert.equal(checked.status, 200)
+    assert.equal(checked.body.sessions.length, 1)
+    const discovered = await request('/api/v1/sessions?format=chatlab&limit=200')
+    assert.equal(discovered.status, 200)
+    assert.equal(discovered.body.sessions.length, 2)
+    const discoveredChat = discovered.body.sessions.find(item => item.name === '测试群')
+    const otherChat = discovered.body.sessions.find(item => item.name === '对照群')
+    assert.ok(discoveredChat)
+    assert.ok(otherChat)
+    assert.notEqual(discoveredChat.id, otherChat.id)
+    assert.match(discoveredChat.id, /^tg\./)
+    const rootPull = `/api/v1/sessions/${discoveredChat.id}/messages`
+    const rootFirst = await request(`${rootPull}?format=chatlab&limit=1`)
+    assert.equal(rootFirst.status, 200)
+    assert.equal(rootFirst.body.meta.platform, 'telegram')
+    assert.deepEqual(rootFirst.body.messages.map(message => message.platformMessageId), ['1'])
+    assert.equal(rootFirst.body.sync.nextSince, undefined)
+    assert.equal(rootFirst.body.sync.nextOffset, 1)
+    const rootSecond = await request(`${rootPull}?format=chatlab&limit=1&offset=${rootFirst.body.sync.nextOffset}`)
+    assert.deepEqual(rootSecond.body.messages.map(message => message.platformMessageId), ['2'])
+    assert.equal(rootSecond.body.sync.nextSince, undefined)
+    const rootLast = await request(`${rootPull}?format=chatlab&limit=1&offset=${rootSecond.body.sync.nextOffset}`)
+    assert.deepEqual(rootLast.body.messages.map(message => message.platformMessageId), ['3'])
+    assert.equal(rootLast.body.sync.hasMore, false)
+    assert.equal(rootLast.body.sync.nextSince, 102)
+    const rootMessage = await request(`/api/v1/messages?talker=${encodeURIComponent(discoveredChat.id)}&format=chatlab`)
+    assert.equal(rootMessage.body.meta.platform, 'telegram')
+    const otherPull = await request(`/api/v1/sessions/${otherChat.id}/messages?format=chatlab`)
+    assert.deepEqual(otherPull.body.messages.map(message => message.platformMessageId), ['9'])
+    assert.equal((await request('/api/v1/sessions/tg.live.invalid/messages?format=chatlab')).status, 400)
+    assert.equal((await request('/api/v1/sessions/tg.live.YQ/messages?format=chatlab')).status, 404)
 
     const sessions = await request(`${endpoint}/sessions?format=chatlab`)
     assert.equal(sessions.status, 200)

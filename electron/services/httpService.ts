@@ -18,7 +18,7 @@ import * as os from 'os'
 import { ApiMessageMapperPool } from './apiMessageMapperPool'
 import { mapRowsToMessagesLite } from './apiMessageMapping'
 import { telegramService } from './telegramService'
-import { listTelegramSessions, pageTelegramMessages, publicTelegramMessages, toTelegramChatLab } from './telegramHttp'
+import { listTelegramSessions, pageTelegramMessages, parseTelegramPullSessionId, publicTelegramMessages, telegramChatLabSessions, telegramPullSessionId, toTelegramChatLab } from './telegramHttp'
 import type { TelegramSource } from '../../shared/telegram'
 
 // ChatLab 格式定义
@@ -480,7 +480,12 @@ class HttpService {
             } else if (pathname === '/api/v1/push/messages') {
                 this.handleMessagePushStream(req, res, url)
             } else if (pathname === '/api/v1/messages') {
-                await this.handleMessages(url, res)
+                const remoteId = url.searchParams.get('talker') || ''
+                if (remoteId.startsWith('tg.')) {
+                    await this.handleTelegramPullSession(remoteId, url, res, false)
+                } else {
+                    await this.handleMessages(url, res)
+                }
             } else if (pathname === '/api/v1/sessions') {
                 await this.handleSessions(url, res)
             } else if (
@@ -491,6 +496,8 @@ class HttpService {
                 const sessionId = decodeURIComponent(parts[4] || '')
                 if (!sessionId) {
                     this.sendError(res, 400, 'Missing session ID')
+                } else if (sessionId.startsWith('tg.')) {
+                    await this.handleTelegramPullSession(sessionId, url, res, true)
                 } else {
                     await this.handlePullMessages(sessionId, url, res)
                 }
@@ -1053,6 +1060,14 @@ class HttpService {
     return 'private'
   }
 
+  private async handleTelegramPullSession(sessionId: string, url: URL, res: http.ServerResponse, isPull: boolean): Promise<void> {
+    const parsed = parseTelegramPullSessionId(sessionId)
+    if (!parsed) return this.sendError(res, 400, 'Invalid Telegram session ID')
+    const source = await telegramService.getStore().getSource(parsed.sourceId)
+    if (!source) return this.sendError(res, 404, 'Telegram source not found')
+    await this.handleTelegramMessages(source, parsed.chatId, url, res, isPull)
+  }
+
   private async handleTelegramRequest(method: string | undefined, pathname: string, url: URL, res: http.ServerResponse): Promise<void> {
     const parts = pathname.slice('/api/v1/telegram/sources/'.length).split('/')
     let sourceId: string
@@ -1121,7 +1136,7 @@ class HttpService {
         ...data,
         sync: {
           hasMore: page.hasMore,
-          nextSince: page.hasMore ? page.messages.at(-1)?.date : undefined,
+          nextSince: page.hasMore ? undefined : page.messages.at(-1)?.date,
           nextOffset: page.hasMore ? offset + page.messages.length : undefined,
           watermark: Math.floor(Date.now() / 1000),
           complete: chat.complete
@@ -1261,16 +1276,20 @@ class HttpService {
     const format = (url.searchParams.get('format') || '').trim().toLowerCase()
 
     try {
-      const sessions = await chatService.getSessions()
-      if (!sessions.success || !sessions.sessions) {
-        this.sendError(res, 500, sessions.error || 'Failed to get sessions')
+      const telegramSources = format === 'chatlab' ? await telegramService.getStore().listSources() : []
+      const sessions = await chatService.getSessions().catch(error => {
+        if (telegramSources.length) return null
+        throw error
+      })
+      if ((!sessions?.success || !sessions.sessions) && !telegramSources.length) {
+        this.sendError(res, 500, sessions?.error || 'Failed to get sessions')
         return
       }
 
-      let filteredSessions = sessions.sessions
+      let filteredSessions = sessions?.sessions || []
       if (keyword) {
         const lowerKeyword = keyword.toLowerCase()
-        filteredSessions = sessions.sessions.filter(s => 
+        filteredSessions = filteredSessions.filter(s =>
           s.username.toLowerCase().includes(lowerKeyword) ||
           (s.displayName && s.displayName.toLowerCase().includes(lowerKeyword))
         )
@@ -1279,15 +1298,17 @@ class HttpService {
       const limitedSessions = filteredSessions.slice(0, limit)
 
       if (format === 'chatlab') {
+        const telegramSessions = telegramSources.flatMap(source =>
+          telegramChatLabSessions(source, keyword, limit, chatId => telegramPullSessionId(source.id, chatId)))
         this.sendJson(res, {
-          sessions: limitedSessions.map(s => ({
+          sessions: [...telegramSessions, ...limitedSessions.map(s => ({
             id: s.username,
             name: s.displayName || s.username,
             platform: 'wechat',
             type: this.getApiSessionType(s.username),
             messageCount: s.messageCountHint || undefined,
             lastMessageAt: s.lastTimestamp
-          }))
+          }))].slice(0, limit)
         })
         return
       }

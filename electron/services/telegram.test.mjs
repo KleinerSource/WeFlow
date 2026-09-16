@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import { parseTelegramExport } from './telegramExport.ts'
 import { TelegramStore } from './telegramStore.ts'
 import { canPersistTelegramSession } from './telegramStorage.ts'
-import { listTelegramSessions, pageTelegramMessages, publicTelegramMessages, toTelegramChatLab } from './telegramHttp.ts'
+import { listTelegramSessions, pageTelegramMessages, parseTelegramPullSessionId, publicTelegramMessages, telegramPullSessionId, toTelegramChatLab } from './telegramHttp.ts'
 
 test('Windows 运行时没有存储后端查询方法时仍可读取状态', () => {
   assert.equal(canPersistTelegramSession({ isEncryptionAvailable: () => true }), true)
@@ -61,6 +61,21 @@ test('缓存按会话隔离、去重，并拒绝越界媒体路径', async () =>
   }
 })
 
+test('tdata 授权只可复用匹配的在线缓存，不覆盖无法确认的账号', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'weflow-tdata-isolation-'))
+  try {
+    const store = new TelegramStore(root)
+    const chat = { id: '1', title: '原账号', kind: 'personal_chat', lastMessageAt: 0, unreadCount: 0, messageCount: 0, complete: false }
+    await store.updateLive('原账号', [chat], '123')
+    await store.assertLiveAccount('123')
+    await assert.rejects(store.assertLiveAccount('456'), /在线缓存/)
+    assert.equal((await store.getSource('live')).accountId, '123')
+    assert.equal((await store.getSource('live')).chats[0].title, '原账号')
+    await store.updateLive('原账号', [], '123')
+    await assert.rejects(store.assertLiveAccount('456'), /在线缓存/)
+  } finally { await rm(root, { recursive: true, force: true }) }
+})
+
 test('HTTP 会话按在线账号和导入文件隔离，映射 ChatLab 平台与类型', async () => {
   const root = await mkdtemp(join(tmpdir(), 'weflow-telegram-http-test-'))
   try {
@@ -82,6 +97,16 @@ test('HTTP 会话按在线账号和导入文件隔离，映射 ChatLab 平台与
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+test('ChatLab 根路径的 Telegram 会话 ID 包含源并可安全还原', () => {
+  const id = telegramPullSessionId('live', '群/组 %42')
+  assert.deepEqual(parseTelegramPullSessionId(id), { sourceId: 'live', chatId: '群/组 %42' })
+  assert.equal(id.includes('/'), false)
+  assert.equal(parseTelegramPullSessionId('tg.live.!!'), null)
+  assert.equal(parseTelegramPullSessionId('tg.invalid.YQ'), null)
+  assert.equal(parseTelegramPullSessionId('wxid_original'), null)
+  assert.notEqual(telegramPullSessionId('live', '42'), telegramPullSessionId('import-00000000-0000-0000-0000-000000000001', '42'))
 })
 
 test('HTTP 消息按时间、关键词与偏移分页，不暴露本机媒体路径', () => {
