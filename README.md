@@ -75,16 +75,17 @@ WeFlow 提供本地 HTTP API 服务，支持通过接口查询消息数据，可
 
 完整接口文档：[点击查看](docs/HTTP-API.md)
 
-Telegram 在线缓存及 Desktop JSON 导入数据也可通过受 Token 保护的只读接口查询；使用 `/api/v1/telegram/sources` 获取数据源，再查询该源的会话和消息。原微信 HTTP 接口保持不变。
+Telegram 在线缓存及 Desktop JSON 导入数据也可通过受 Token 保护的只读接口查询。ChatLab 远程数据源与微信共用 `http://127.0.0.1:5031/api/v1` 和 API Token，发现列表会包含 Telegram 会话；其他客户端可使用 `/api/v1/telegram/sources` 按来源查询。原微信 JSON 接口保持不变。
 
 ## Telegram 数据源
 
-侧边栏的 **Telegram** 与微信数据独立，可以在没有微信数据库连接时使用。支持两种本地数据来源：
+侧边栏的 **Telegram** 与微信数据独立，可以在没有微信数据库连接时使用。支持以下接入方式：
 
 - **账号同步**：在 [my.telegram.org](https://my.telegram.org/) 创建应用并取得 API ID / API Hash，在 Telegram 页面输入手机号、验证码及需要的两步验证。登录后会实时接收新消息；打开会话时按需补取历史。需要完整统计或导出时，先点击“同步全部历史”。
+- **Desktop `tdata` 授权**：在 Telegram 页面填写自己的 API ID / API Hash，选择 Telegram Desktop 默认配置中的 `tdata` 目录，输入本地锁密码（没有则留空）、读取并选择账号。WeFlow 只读该目录中的授权文件，临时使用 Desktop 授权批准一个独立的新会话，然后断开旧授权并联网同步聊天。`tdata` 不是完整的离线聊天数据库；本地锁密码不保存，旧授权密钥也不保存。若在线缓存已有无法确认身份的其他账号，需使用独立的 WeFlow 配置目录，避免混入其聊天。
 - **Desktop JSON 导入**：在 Telegram Desktop 导出聊天记录时选择 JSON，然后在 Telegram 页面导入 `result.json`。支持全部聊天或单个聊天导出；导入的数据不会自动更新，媒体文件仍从原导出目录打开，请保留该目录。
 
-Telegram 页面提供聊天、已同步消息的基础统计，以及 JSON / CSV / Markdown 导出。微信专属的朋友圈、年度报告等功能不适用于 Telegram。账号会话仅在系统提供安全加密存储时持久保存；验证码和两步验证密码不会保存。
+Telegram 页面提供聊天、已同步消息的基础统计，以及 JSON / CSV / Markdown 导出。微信专属的朋友圈、年度报告等功能不适用于 Telegram。账号会话仅在系统提供安全加密存储时持久保存；验证码和两步验证密码不会保存。`tdata` 授权需要安全存储可用，目前仅支持 Telegram Desktop 默认的 `key_datas` 配置文件。
 
 ## 面向开发者
 

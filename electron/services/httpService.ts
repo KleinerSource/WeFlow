@@ -1274,45 +1274,75 @@ class HttpService {
     const keyword = (url.searchParams.get('keyword') || '').trim()
     const limit = this.parseIntParam(url.searchParams.get('limit'), 100, 1, 10000)
     const format = (url.searchParams.get('format') || '').trim().toLowerCase()
+    const requestedPlatform = (url.searchParams.get('platform') || '').trim().toLowerCase()
+    if (format === 'chatlab' && requestedPlatform && requestedPlatform !== 'wechat' && requestedPlatform !== 'telegram') {
+      return this.sendError(res, 400, 'Invalid platform, supported: wechat/telegram')
+    }
+    const platformKeyword = keyword.toLowerCase()
+    const platform = requestedPlatform || (format === 'chatlab' && (platformKeyword === 'wechat' || platformKeyword === 'telegram') ? platformKeyword : '')
+    const searchKeyword = !requestedPlatform && platform ? '' : keyword
 
     try {
       const telegramSources = format === 'chatlab' ? await telegramService.getStore().listSources() : []
-      const sessions = await chatService.getSessions().catch(error => {
+      const sessions = await (format === 'chatlab' && platform === 'telegram' ? Promise.resolve(null) : chatService.getSessions()).catch(error => {
         if (telegramSources.length) return null
         throw error
       })
-      if ((!sessions?.success || !sessions.sessions) && !telegramSources.length) {
+      if ((!sessions?.success || !sessions.sessions) && !telegramSources.length && platform !== 'telegram') {
         this.sendError(res, 500, sessions?.error || 'Failed to get sessions')
         return
       }
 
       let filteredSessions = sessions?.sessions || []
-      if (keyword) {
-        const lowerKeyword = keyword.toLowerCase()
+      if (searchKeyword) {
+        const lowerKeyword = searchKeyword.toLowerCase()
         filteredSessions = filteredSessions.filter(s =>
           s.username.toLowerCase().includes(lowerKeyword) ||
           (s.displayName && s.displayName.toLowerCase().includes(lowerKeyword))
         )
       }
 
-      const limitedSessions = filteredSessions.slice(0, limit)
-
       if (format === 'chatlab') {
-        const telegramSessions = telegramSources.flatMap(source =>
-          telegramChatLabSessions(source, keyword, limit, chatId => telegramPullSessionId(source.id, chatId)))
+        const telegramSessions = platform === 'wechat' ? [] : telegramSources.flatMap(source =>
+          telegramChatLabSessions(source, searchKeyword, source.chats.length, chatId => telegramPullSessionId(source.id, chatId)))
+        const allSessions = [...telegramSessions, ...filteredSessions.map(s => ({
+          id: s.username,
+          name: s.displayName || s.username,
+          platform: 'wechat',
+          type: this.getApiSessionType(s.username),
+          messageCount: s.messageCountHint || undefined,
+          lastMessageAt: s.lastTimestamp
+        }))].sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0) || a.id.localeCompare(b.id))
+
+        const cursor = url.searchParams.get('cursor')
+        let start = 0
+        if (cursor) {
+          if (cursor.length > 4096 || !/^[A-Za-z0-9_-]+$/.test(cursor)) return this.sendError(res, 400, 'Invalid cursor')
+          const bytes = Buffer.from(cursor, 'base64url')
+          if (bytes.toString('base64url') !== cursor) return this.sendError(res, 400, 'Invalid cursor')
+          let position: { id?: unknown; timestamp?: unknown; keyword?: unknown; platform?: unknown }
+          try { position = JSON.parse(bytes.toString('utf8')) } catch { return this.sendError(res, 400, 'Invalid cursor') }
+          if (!position || typeof position.id !== 'string' || typeof position.timestamp !== 'number'
+            || position.keyword !== keyword || position.platform !== platform) return this.sendError(res, 400, 'Invalid cursor')
+          const index = allSessions.findIndex(item => item.id === position.id && (item.lastMessageAt || 0) === position.timestamp)
+          if (index < 0) return this.sendError(res, 400, 'Invalid cursor')
+          start = index + 1
+        }
+
+        const page = allSessions.slice(start, start + limit)
+        const hasMore = start + page.length < allSessions.length
+        const last = page.at(-1)
         this.sendJson(res, {
-          sessions: [...telegramSessions, ...limitedSessions.map(s => ({
-            id: s.username,
-            name: s.displayName || s.username,
-            platform: 'wechat',
-            type: this.getApiSessionType(s.username),
-            messageCount: s.messageCountHint || undefined,
-            lastMessageAt: s.lastTimestamp
-          }))].slice(0, limit)
+          sessions: page,
+          page: {
+            hasMore,
+            nextCursor: hasMore && last ? Buffer.from(JSON.stringify({ id: last.id, timestamp: last.lastMessageAt || 0, keyword, platform })).toString('base64url') : undefined
+          }
         })
         return
       }
 
+      const limitedSessions = filteredSessions.slice(0, limit)
       this.sendJson(res, {
         success: true,
         count: limitedSessions.length,

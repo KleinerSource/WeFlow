@@ -153,6 +153,43 @@ test('Telegram HTTP API 使用现有鉴权并隔离导入源', async () => {
     assert.equal((await request(`${endpoint}/messages?talker=private_group%3A42&media=1`)).status, 400)
     assert.equal((await request(`${pullPath}?media=1`)).status, 400)
     assert.equal((await request('/api/v1/telegram/sources', { method: 'POST' })).status, 405)
+
+    const manyChats = Array.from({ length: 5001 }, (_, index) => ({
+      id: `bulk:${index}`,
+      title: `批量会话 ${index}`,
+      kind: index === 0 ? 'channel' : 'personal_chat',
+      lastMessageAt: 1000 + index,
+      unreadCount: 0,
+      messageCount: 0,
+      complete: false
+    }))
+    await store.updateLive('在线账号', manyChats)
+    const firstPage = await request('/api/v1/sessions?format=chatlab&keyword=telegram&limit=200')
+    assert.equal(firstPage.status, 200)
+    assert.equal(firstPage.body.sessions.length, 200)
+    assert.ok(firstPage.body.sessions.every(item => item.platform === 'telegram'))
+    assert.equal(firstPage.body.page.hasMore, true)
+    assert.ok(firstPage.body.page.nextCursor)
+    const secondPage = await request(`/api/v1/sessions?format=chatlab&keyword=telegram&limit=200&cursor=${firstPage.body.page.nextCursor}`)
+    assert.equal(secondPage.status, 200)
+    assert.equal(secondPage.body.sessions.length, 200)
+    assert.equal(new Set([...firstPage.body.sessions, ...secondPage.body.sessions].map(item => item.id)).size, 400)
+
+    const largePage = await request('/api/v1/sessions?format=chatlab&platform=telegram&limit=5000')
+    assert.equal(largePage.body.sessions.length, 5000)
+    assert.equal(largePage.body.page.hasMore, true)
+    const lastPage = await request(`/api/v1/sessions?format=chatlab&platform=telegram&limit=5000&cursor=${largePage.body.page.nextCursor}`)
+    assert.equal(lastPage.body.sessions.length, 3)
+    assert.equal(lastPage.body.page.hasMore, false)
+    assert.equal(lastPage.body.sessions.find(item => item.id === discoveredChat.id)?.name, '测试群')
+    assert.equal((await request('/api/v1/sessions?format=chatlab&keyword=wechat&limit=200')).body.sessions.length, 0)
+    assert.equal((await request('/api/v1/sessions?format=chatlab&keyword=%E6%89%B9%E9%87%8F%E4%BC%9A%E8%AF%9D%204999&platform=telegram')).body.sessions.length, 1)
+    const channel = await request('/api/v1/sessions?format=chatlab&platform=telegram&keyword=%E6%89%B9%E9%87%8F%E4%BC%9A%E8%AF%9D%200')
+    assert.equal(channel.body.sessions.length, 1)
+    assert.equal(channel.body.sessions[0].type, 'channel')
+    assert.equal((await request('/api/v1/sessions?format=chatlab&platform=invalid')).status, 400)
+    assert.equal((await request('/api/v1/sessions?format=chatlab&cursor=invalid')).status, 400)
+    assert.equal((await request(`/api/v1/sessions?format=chatlab&keyword=wechat&cursor=${firstPage.body.page.nextCursor}`)).status, 400)
   } finally {
     if (child && child.exitCode === null) {
       child.kill()

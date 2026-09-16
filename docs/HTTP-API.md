@@ -324,7 +324,7 @@ GET /api/v1/sessions
 
 ## 4.1 获取会话列表（ChatLab 格式）
 
-当 `format=chatlab` 时，返回 ChatLab Pull 协议兼容格式，可直接作为 ChatLab 远程数据源。
+当 `format=chatlab` 时，返回微信与 Telegram 已缓存会话的 ChatLab Pull 协议兼容列表。普通 JSON 格式保持微信专用。
 
 **请求**
 
@@ -337,8 +337,10 @@ GET /api/v1/sessions?format=chatlab
 | 参数      | 类型   | 必填 | 说明                             |
 | --------- | ------ | ---- | -------------------------------- |
 | `format`  | string | 是   | 设为 `chatlab`                   |
-| `keyword` | string | 否   | 匹配 `username` 或 `displayName` |
-| `limit`   | number | 否   | 默认 `100`                       |
+| `keyword` | string | 否   | 匹配会话 ID/名称；单独输入 `wechat` 或 `telegram` 时按平台搜索 |
+| `platform` | string | 否  | `wechat` 或 `telegram`；可与名称关键词组合，仅 ChatLab 格式有效 |
+| `limit`   | number | 否   | 每页条数，默认 `100`，最大 `10000` |
+| `cursor`  | string | 否   | 上一页 `page.nextCursor`，须与相同的搜索条件一起使用 |
 
 ### 响应
 
@@ -352,19 +354,34 @@ GET /api/v1/sessions?format=chatlab
       "type": "group",
       "messageCount": 58000,
       "lastMessageAt": 1738713600
+    },
+    {
+      "id": "tg.live.MTIz",
+      "name": "Telegram 群",
+      "platform": "telegram",
+      "type": "group",
+      "messageCount": 120,
+      "lastMessageAt": 1738713600,
+      "complete": true
     }
-  ]
+  ],
+  "page": { "hasMore": false }
 }
 ```
 
 | 字段            | 说明                                |
 | --------------- | ----------------------------------- |
-| `id`            | 会话 ID（微信 username）            |
+| `id`            | 微信 username；Telegram 为带来源的 `tg.<sourceId>.<编码会话ID>` |
 | `name`          | 会话显示名称                        |
-| `platform`      | 固定 `wechat`                       |
-| `type`          | `group`（群聊）或 `private`（私聊） |
-| `messageCount`  | 消息数量（估算值，可能不精确）      |
+| `platform`      | `wechat` 或 `telegram`              |
+| `type`          | `group`（群聊）、`private`（私聊）、`channel`（频道）或 `other` |
+| `messageCount`  | 微信为估算值；Telegram 为本地缓存条数 |
 | `lastMessageAt` | 最后消息的秒级 Unix 时间戳          |
+| `complete`      | Telegram 会话历史是否已完整同步；微信不返回 |
+
+按最新消息时间倒序返回。当 `page.hasMore=true` 时，使用 `page.nextCursor` 和相同的 `keyword`、`platform` 请求下一页；无效游标或平台返回 400。普通 JSON 会话列表不使用此分页协议。
+
+在 ChatLab 的订阅管理搜索框输入 `telegram` 或 `wechat` 后点击“搜索”，可只查看对应平台；有后续页面时点击“加载更多”。例如直接请求 `GET /api/v1/sessions?format=chatlab&platform=telegram&keyword=项目&limit=200` 可在 Telegram 会话中按名称搜索。ChatLab 当前版本会隐藏 `channel` 和 `other` 类型的会话；WeFlow 仍按真实类型返回它们，不会将频道冒充群聊。
 
 ---
 
@@ -442,7 +459,7 @@ GET /api/v1/sessions/:id/messages
 | `nextOffset` | 下次请求的 `offset` 值           |
 | `watermark`  | 本次拉取的时间上界（秒级时间戳） |
 
-**ChatLab 对接方式**：在 ChatLab 设置中添加远程数据源，`baseUrl` 填 `http://127.0.0.1:5031/api/v1`，Token 填 WeFlow 中配置的 API Token。
+**ChatLab 对接方式**：在 ChatLab 设置中添加远程数据源，`baseUrl` 填 `http://127.0.0.1:5031/api/v1`，Token 填 WeFlow 中配置的 API Token。Telegram 须先在 WeFlow 中同步或导入消息；无需配置微信。ChatLab 从此根地址发现所有已缓存的来源，按 `platform` 区分微信与 Telegram。
 
 ---
 
@@ -801,7 +818,9 @@ members = requests.get(
 
 ## 10. 读取 Telegram 数据
 
-Telegram 接口沿用上方的 Access Token，无需连接微信数据库。它们只读取 WeFlow 已同步或已导入的缓存；请求不会触发 Telegram 登录、远端历史同步或媒体下载。原 `/api/v1/sessions` 和 `/api/v1/messages` 仍只返回微信数据。
+Telegram 接口沿用上方的 Access Token，无需连接微信数据库。它们只读取 WeFlow 已同步或已导入的缓存（包括经 Desktop `tdata` 授权后联网同步的在线缓存）；请求不会触发 Telegram 登录、远端历史同步或媒体下载。普通 JSON `/api/v1/sessions` 与 `/api/v1/messages` 保持微信默认行为；`format=chatlab` 的根会话列表包含 Telegram，使用该列表返回的 `tg.` 会话 ID 即可从根 Pull 或查询消息。
+
+在 ChatLab 中填写 `http://127.0.0.1:5031/api/v1` 作为远程数据源地址和 WeFlow 的 API Token，无需手动拼接 Telegram 来源 ID。例如根会话列表返回 `tg.live.MTIz` 时，ChatLab 将请求 `/api/v1/sessions/tg.live.MTIz/messages?format=chatlab`。同一个聊天出现在不同 Telegram 来源时，ID 仍各自独立。ChatLab 当前界面只提供私聊/群聊筛选；API 返回的频道会话可能不在其可选列表中。
 
 先获取可用数据源：
 
@@ -841,9 +860,9 @@ GET /api/v1/telegram/sources/{sourceId}/messages?talker={chatId}&format=chatlab
 GET /api/v1/telegram/sources/{sourceId}/sessions/{chatId}/messages?limit=5000&offset=0
 ```
 
-此接口只支持 `GET`，返回按时间正序排列的 ChatLab 消息和 `sync` 块。支持 `since`、`end`、`limit`（默认和最大 5000）、`offset`；`since` 是含边界的时间下限。连续翻页请使用 `sync.nextOffset`，不要在同一轮翻页中同时更换 `since` 和 `offset`。`sync.hasMore` 仅表示**缓存中**是否还有下一页，`sync.complete` 表示会话历史是否已完整同步。
+此接口只支持 `GET`，返回按时间正序排列的 ChatLab 消息和 `sync` 块。支持 `since`、`end`、`limit`（默认和最大 5000）、`offset`；`since` 是含边界的时间下限。有下一页时仅返回 `sync.nextOffset`，最后一页才返回 `sync.nextSince`；同一轮翻页应保持 `since` 不变并传入 `nextOffset`，避免同秒消息重复。`sync.hasMore` 仅表示**缓存中**是否还有下一页，`sync.complete` 表示会话历史是否已完整同步。
 
-在 ChatLab 中可将所选源的远程数据源 `baseUrl` 填为上述资源根，Token 仍填 WeFlow API 服务的 Token。JSON 导入源是静态快照；在线源的缓存会随应用中的同步更新，但 HTTP API 本身不主动发起同步。Telegram 暂不支持 HTTP 媒体导出或 SSE 主动推送；请求 `media=1` 会得到 400。发送者仅有缓存中的名称，没有稳定的 Telegram 用户 ID。
+上述深层资源根适用于只需单个 Telegram 来源的 API 客户端；ChatLab 推荐使用统一 `/api/v1` 根地址。JSON 导入源是静态快照；在线源的缓存会随应用中的同步更新，但 HTTP API 本身不主动发起同步。Telegram 暂不支持 HTTP 媒体导出或 SSE 主动推送；请求 `media=1` 会得到 400。发送者仅有缓存中的名称，没有稳定的 Telegram 用户 ID。
 
 错误码：401 表示缺少或无效 Token；400 表示无效源 ID、缺少会话 ID、无效格式或不支持的媒体参数；404 表示数据源或会话不存在；405 表示方法不支持。
 
