@@ -1,6 +1,6 @@
 ﻿import type { ChatSession, Message, Contact, ContactInfo, ChatRecordItem } from './models'
 
-import type { TelegramAuthStep, TelegramMessage, TelegramProgress, TelegramSource, TelegramStatus } from '../../shared/telegram'
+import type { TelegramAuthStep, TelegramMessage, TelegramProgress, TelegramSource, TelegramStatus, TelegramSyncRange } from '../../shared/telegram'
 
 export interface SessionChatWindowOpenOptions {
   source?: 'chat' | 'export'
@@ -328,7 +328,7 @@ export interface ElectronAPI {
     messages: (sourceId: string, chatId: string) => Promise<TelegramMessage[]>
     loadMessages: (chatId: string, older: boolean) => Promise<TelegramMessage[]>
     downloadMedia: (chatId: string, messageId: number) => Promise<string>
-    syncAll: () => Promise<void>
+    syncAll: (range?: TelegramSyncRange) => Promise<void>
     cancelSync: () => Promise<void>
     importJson: () => Promise<string | null>
     removeImport: (sourceId: string) => Promise<void>

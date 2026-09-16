@@ -40,3 +40,8 @@ export interface TelegramProgress {
   completed: number
   total: number
 }
+
+export interface TelegramSyncRange {
+  from?: string
+  to?: string
+}

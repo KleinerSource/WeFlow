@@ -187,6 +187,28 @@ test('Telegram HTTP API 使用现有鉴权并隔离导入源', async () => {
     const channel = await request('/api/v1/sessions?format=chatlab&platform=telegram&keyword=%E6%89%B9%E9%87%8F%E4%BC%9A%E8%AF%9D%200')
     assert.equal(channel.body.sessions.length, 1)
     assert.equal(channel.body.sessions[0].type, 'channel')
+    const channelMessages = Array.from({ length: 5999 }, (_, index) => ({
+      id: index + 1,
+      date: 2000 + Math.floor(index / 10),
+      sender: '测试账号',
+      text: `消息 ${index + 1}`,
+      kind: 'text',
+      outgoing: false
+    }))
+    await store.upsertMessages('live', 'bulk:0', channelMessages)
+    const refreshedChannel = await request('/api/v1/sessions?format=chatlab&platform=telegram&keyword=%E6%89%B9%E9%87%8F%E4%BC%9A%E8%AF%9D%200')
+    assert.equal(refreshedChannel.body.sessions[0].messageCount, 5999)
+    let messageOffset = 0
+    const receivedIds = new Set()
+    for (;;) {
+      const result = await request(`/api/v1/sessions/${refreshedChannel.body.sessions[0].id}/messages?format=chatlab&limit=1000&offset=${messageOffset}`)
+      assert.equal(result.status, 200)
+      for (const message of result.body.messages) receivedIds.add(message.platformMessageId)
+      if (!result.body.sync.hasMore) break
+      assert.equal(result.body.sync.nextOffset, messageOffset + result.body.messages.length)
+      messageOffset = result.body.sync.nextOffset
+    }
+    assert.equal(receivedIds.size, 5999)
     assert.equal((await request('/api/v1/sessions?format=chatlab&platform=invalid')).status, 400)
     assert.equal((await request('/api/v1/sessions?format=chatlab&cursor=invalid')).status, 400)
     assert.equal((await request(`/api/v1/sessions?format=chatlab&keyword=wechat&cursor=${firstPage.body.page.nextCursor}`)).status, 400)

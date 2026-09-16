@@ -17,7 +17,7 @@
     "rebuild": "electron-rebuild",
     "dev": "node scripts/prepare-electron-runtime.cjs && vite",
     "typecheck": "tsc --noEmit",
-    "test:telegram": "node --test electron/services/telegram.test.mjs",
+    "test:telegram": "node --test electron/services/telegram.test.mjs electron/services/telegramSyncRange.test.mjs",
     "build": "node scripts/clean-dist-electron.cjs && tsc && vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "node scripts/prepare-electron-runtime.cjs && vite --mode electron",

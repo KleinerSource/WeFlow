@@ -5,10 +5,11 @@ import { createHash } from 'crypto'
 import { TelegramClient, Api } from 'teleproto'
 import { StringSession } from 'teleproto/sessions'
 import { NewMessage, EditedMessage, DeletedMessage } from 'teleproto/events'
-import type { TelegramAuthStep, TelegramChat, TelegramMessage, TelegramProgress, TelegramStatus } from '../../shared/telegram'
+import type { TelegramAuthStep, TelegramChat, TelegramMessage, TelegramProgress, TelegramStatus, TelegramSyncRange } from '../../shared/telegram'
 import { parseTelegramExport } from './telegramExport'
 import { TelegramStore } from './telegramStore'
 import { canPersistTelegramSession } from './telegramStorage'
+import { parseTelegramSyncRange, selectTelegramSyncBatch } from './telegramSyncRange'
 
 type Credentials = { apiId: number; apiHash: string; session: string }
 
@@ -274,9 +275,10 @@ class TelegramService {
     return output
   }
 
-  async syncAll(): Promise<void> {
+  async syncAll(range?: TelegramSyncRange): Promise<void> {
     if (!this.client) throw new Error('请先登录 Telegram')
     if (this.syncing) throw new Error('历史同步正在进行')
+    const bounds = parseTelegramSyncRange(range)
     this.syncing = true
     this.stopSync = false
     try {
@@ -288,11 +290,16 @@ class TelegramService {
         if (!peer) continue
         let offsetId = 0
         while (!this.stopSync) {
-          const batch = await this.client!.getMessages(peer, { limit: 100, offsetId })
+          const batch = await this.client!.getMessages(peer, {
+            limit: 100,
+            offsetId,
+            ...(offsetId === 0 && bounds.until !== undefined ? { offsetDate: bounds.until } : {})
+          })
           const messages = batch.map(item => this.normalizeMessage(item)).filter((item): item is TelegramMessage => Boolean(item))
-          await this.store.upsertMessages('live', chat.id, messages, batch.length < 100)
+          const selected = selectTelegramSyncBatch(messages, bounds, batch.length < 100)
+          if (selected.messages.length || selected.complete) await this.store.upsertMessages('live', chat.id, selected.messages, selected.complete)
           this.emit('telegram:changed')
-          if (batch.length < 100) break
+          if (selected.stop) break
           offsetId = Math.min(...batch.map(item => item.id))
           if (!offsetId) break
         }

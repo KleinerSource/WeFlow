@@ -695,7 +695,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     messages: (sourceId: string, chatId: string) => ipcRenderer.invoke('telegram:messages', sourceId, chatId),
     loadMessages: (chatId: string, older: boolean) => ipcRenderer.invoke('telegram:loadMessages', chatId, older),
     downloadMedia: (chatId: string, messageId: number) => ipcRenderer.invoke('telegram:downloadMedia', chatId, messageId),
-    syncAll: () => ipcRenderer.invoke('telegram:syncAll'),
+    syncAll: (range?: { from?: string; to?: string }) => ipcRenderer.invoke('telegram:syncAll', range),
     cancelSync: () => ipcRenderer.invoke('telegram:cancelSync'),
     importJson: () => ipcRenderer.invoke('telegram:import'),
     removeImport: (sourceId: string) => ipcRenderer.invoke('telegram:removeImport', sourceId),

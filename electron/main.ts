@@ -39,7 +39,7 @@ import { bizService } from './services/bizService'
 import { backupService } from './services/backupService'
 import { imageDownloadService } from './services/imageDownloadService'
 import { telegramService } from './services/telegramService'
-import type { TelegramAuthStep } from '../shared/telegram'
+import type { TelegramAuthStep, TelegramSyncRange } from '../shared/telegram'
 
 // 屏幕采集去节流（仅影响通知玻璃的 Chromium 流回退管线；Windows 主路径为
 // 原生面板渲染，不经过 Chromium 采集）：默认桌面采集 CPU 预算限制在 50%，
@@ -2013,7 +2013,7 @@ function registerIpcHandlers() {
   ipcMain.handle('telegram:messages', (_, sourceId: string, chatId: string) => telegramService.getStore().getMessages(sourceId, chatId))
   ipcMain.handle('telegram:loadMessages', (_, chatId: string, older: boolean) => telegramService.loadMessages(chatId, older))
   ipcMain.handle('telegram:downloadMedia', (_, chatId: string, messageId: number) => telegramService.downloadMedia(chatId, messageId))
-  ipcMain.handle('telegram:syncAll', () => telegramService.syncAll())
+  ipcMain.handle('telegram:syncAll', (_, range?: TelegramSyncRange) => telegramService.syncAll(range))
   ipcMain.handle('telegram:cancelSync', () => telegramService.cancelSync())
   ipcMain.handle('telegram:import', async () => {
     const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Telegram JSON', extensions: ['json'] }] })

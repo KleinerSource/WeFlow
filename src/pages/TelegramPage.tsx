@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { BarChart3, Download, FileJson, LogOut, MessageSquare, RefreshCw, Search, Settings2, Trash2, Upload, X } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
-import type { TelegramAuthStep, TelegramMessage, TelegramProgress, TelegramSource, TelegramStatus } from '../../shared/telegram'
+import type { TelegramAuthStep, TelegramMessage, TelegramProgress, TelegramSource, TelegramStatus, TelegramSyncRange } from '../../shared/telegram'
 import './TelegramPage.scss'
 
 const api = window.electronAPI.telegram
@@ -11,6 +11,10 @@ const authLabels: Record<TelegramAuthStep, string> = { code: 'Telegram 验证码
 
 function dateLabel(seconds: number): string {
   return seconds ? new Date(seconds * 1000).toLocaleString('zh-CN') : ''
+}
+
+function dateInputValue(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 function TelegramPage() {
@@ -27,6 +31,9 @@ function TelegramPage() {
   const [busy, setBusy] = useState(false)
   const [historyBusy, setHistoryBusy] = useState(false)
   const [progress, setProgress] = useState<TelegramProgress | null>(null)
+  const [syncPeriod, setSyncPeriod] = useState<'all' | '7' | '30' | '90' | 'custom'>('all')
+  const [syncStart, setSyncStart] = useState('')
+  const [syncEnd, setSyncEnd] = useState('')
   const [showConnection, setShowConnection] = useState(false)
   const [authStep, setAuthStep] = useState<TelegramAuthStep | null>(null)
   const [authInput, setAuthInput] = useState('')
@@ -139,8 +146,18 @@ function TelegramPage() {
   }
 
   const handleSync = () => {
+    let range: TelegramSyncRange | undefined
+    if (syncPeriod === 'custom') {
+      if (!syncStart && !syncEnd) { setError('请选择起始日期或截止日期'); return }
+      if (syncStart && syncEnd && syncStart > syncEnd) { setError('起始日期不能晚于截止日期'); return }
+      range = { from: syncStart || undefined, to: syncEnd || undefined }
+    } else if (syncPeriod !== 'all') {
+      const start = new Date()
+      start.setDate(start.getDate() - Number(syncPeriod) + 1)
+      range = { from: dateInputValue(start) }
+    }
     setProgress(null)
-    void run(() => api.syncAll())
+    void run(() => api.syncAll(range))
   }
 
   const handleOlder = async () => {
@@ -197,7 +214,15 @@ function TelegramPage() {
         <section className="tg-connection">
           <div className="tg-connection-title"><h2>Telegram 账号</h2>{sources.length > 0 && <button className="tg-icon-btn" title="关闭" onClick={() => setShowConnection(false)}><X size={17} /></button>}</div>
           {status.connected ? (
-            <div className="tg-connected"><span>{status.accountName} · 已连接</span><button className="tg-button" onClick={handleSync} disabled={busy}>{status.syncing ? '同步中' : '同步全部历史'}</button>{status.syncing && <button className="tg-button" onClick={() => void api.cancelSync()}>停止</button>}<button className="tg-icon-btn" title="退出 Telegram 账号" aria-label="退出 Telegram 账号" onClick={handleLogout}><LogOut size={17} /></button></div>
+            <>
+              <div className="tg-connected"><span>{status.accountName} · 已连接</span><button className="tg-icon-btn" title="退出 Telegram 账号" aria-label="退出 Telegram 账号" onClick={handleLogout}><LogOut size={17} /></button></div>
+              <div className="tg-sync-options">
+                <label>历史范围<select value={syncPeriod} disabled={busy} onChange={event => setSyncPeriod(event.target.value as typeof syncPeriod)}><option value="all">全部历史</option><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="90">最近 90 天</option><option value="custom">自定义日期</option></select></label>
+                {syncPeriod === 'custom' && <><label>起始日期<input type="date" value={syncStart} max={syncEnd || undefined} disabled={busy} onChange={event => setSyncStart(event.target.value)} /></label><label>截止日期<input type="date" value={syncEnd} min={syncStart || undefined} disabled={busy} onChange={event => setSyncEnd(event.target.value)} /></label></>}
+                <button className="tg-button" onClick={handleSync} disabled={busy || status.syncing}>{status.syncing ? '同步中' : syncPeriod === 'all' ? '同步全部历史' : '同步所选历史'}</button>
+                {status.syncing && <button className="tg-button" onClick={() => void api.cancelSync()}>停止</button>}
+              </div>
+            </>
           ) : (
             <form className="tg-login-form" onSubmit={handleLogin}>
               <label>API ID<input inputMode="numeric" type="number" min="1" required value={apiId} onChange={event => setApiId(event.target.value)} /></label>
