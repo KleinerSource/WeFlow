@@ -109,6 +109,19 @@ test('ChatLab 根路径的 Telegram 会话 ID 包含源并可安全还原', () =
   assert.notEqual(telegramPullSessionId('live', '42'), telegramPullSessionId('import-00000000-0000-0000-0000-000000000001', '42'))
 })
 
+test('频道仅在 ChatLab 格式中兼容为群聊，原始类型仍是频道', () => {
+  for (const kind of ['channel', 'public_channel']) {
+    const chat = { id: 'channel:42', title: '公告频道', kind, lastMessageAt: 100, unreadCount: 0, messageCount: 2, complete: false }
+    const source = { id: 'live', label: '我', kind: 'account', chats: [chat] }
+    assert.equal(listTelegramSessions(source, '', 10, false).sessions[0].kind, kind)
+    assert.equal(listTelegramSessions(source, '', 10, true).sessions[0].type, 'group')
+    const pulled = toTelegramChatLab(source, chat, [{ id: 1, date: 100, sender: '我', text: '公告', kind: 'text', outgoing: true }])
+    assert.equal(pulled.meta.type, 'group')
+    assert.equal(pulled.meta.groupId, chat.id)
+    assert.equal(pulled.meta.platform, 'telegram')
+  }
+})
+
 test('HTTP 消息按时间、关键词与偏移分页，不暴露本机媒体路径', () => {
   const source = { id: 'live', label: '我', kind: 'account', chats: [] }
   const chat = { id: 'group:1', title: '群', kind: 'group', lastMessageAt: 120, unreadCount: 0, messageCount: 3, complete: false }

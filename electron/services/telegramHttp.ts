@@ -1,6 +1,6 @@
 import type { TelegramChat, TelegramMessage, TelegramSource } from '../../shared/telegram'
 
-type ChatLabSessionType = 'group' | 'private' | 'channel' | 'other'
+type ChatLabSessionType = 'group' | 'private' | 'other'
 
 export function telegramPullSessionId(sourceId: string, chatId: string): string {
   return `tg.${sourceId}.${Buffer.from(chatId, 'utf8').toString('base64url')}`
@@ -17,7 +17,8 @@ export function parseTelegramPullSessionId(id: string): { sourceId: string; chat
 }
 
 export function telegramSessionType(kind: string): ChatLabSessionType {
-  if (kind === 'channel' || kind === 'public_channel') return 'channel'
+  // ChatLab 订阅管理仅展示群聊和私聊；频道在兼容格式中按群聊处理。
+  if (kind === 'channel' || kind === 'public_channel') return 'group'
   if (kind === 'group' || kind === 'private_group' || kind === 'public_group' || kind === 'supergroup') return 'group'
   if (kind === 'personal_chat' || kind === 'private_chat') return 'private'
   return 'other'

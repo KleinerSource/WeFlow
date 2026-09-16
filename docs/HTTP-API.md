@@ -374,14 +374,14 @@ GET /api/v1/sessions?format=chatlab
 | `id`            | 微信 username；Telegram 为带来源的 `tg.<sourceId>.<编码会话ID>` |
 | `name`          | 会话显示名称                        |
 | `platform`      | `wechat` 或 `telegram`              |
-| `type`          | `group`（群聊）、`private`（私聊）、`channel`（频道）或 `other` |
+| `type`          | `group`（群聊及兼容映射的 Telegram 频道）、`private`（私聊）、`channel`（微信频道）或 `other` |
 | `messageCount`  | 微信为估算值；Telegram 为本地缓存条数 |
 | `lastMessageAt` | 最后消息的秒级 Unix 时间戳          |
 | `complete`      | Telegram 会话历史是否已完整同步；微信不返回 |
 
 按最新消息时间倒序返回。当 `page.hasMore=true` 时，使用 `page.nextCursor` 和相同的 `keyword`、`platform` 请求下一页；无效游标或平台返回 400。普通 JSON 会话列表不使用此分页协议。
 
-在 ChatLab 的订阅管理搜索框输入 `telegram` 或 `wechat` 后点击“搜索”，可只查看对应平台；有后续页面时点击“加载更多”。例如直接请求 `GET /api/v1/sessions?format=chatlab&platform=telegram&keyword=项目&limit=200` 可在 Telegram 会话中按名称搜索。ChatLab 当前版本会隐藏 `channel` 和 `other` 类型的会话；WeFlow 仍按真实类型返回它们，不会将频道冒充群聊。
+在 ChatLab 的订阅管理搜索框输入 `telegram` 或 `wechat` 后点击“搜索”，可只查看对应平台；有后续页面时点击“加载更多”。例如直接请求 `GET /api/v1/sessions?format=chatlab&platform=telegram&keyword=项目&limit=200` 可在 Telegram 会话中按名称搜索。ChatLab 当前版本会隐藏 `channel` 和 `other` 类型的会话，因此 Telegram 频道仅在 ChatLab 格式的发现列表和消息 `meta.type` 中兼容映射为 `group`，并会按群聊展示和分析；普通 JSON 中的原始 `kind` 仍为 `channel`。
 
 ---
 
@@ -820,7 +820,7 @@ members = requests.get(
 
 Telegram 接口沿用上方的 Access Token，无需连接微信数据库。它们只读取 WeFlow 已同步或已导入的缓存（包括经 Desktop `tdata` 授权后联网同步的在线缓存）；请求不会触发 Telegram 登录、远端历史同步或媒体下载。普通 JSON `/api/v1/sessions` 与 `/api/v1/messages` 保持微信默认行为；`format=chatlab` 的根会话列表包含 Telegram，使用该列表返回的 `tg.` 会话 ID 即可从根 Pull 或查询消息。
 
-在 ChatLab 中填写 `http://127.0.0.1:5031/api/v1` 作为远程数据源地址和 WeFlow 的 API Token，无需手动拼接 Telegram 来源 ID。例如根会话列表返回 `tg.live.MTIz` 时，ChatLab 将请求 `/api/v1/sessions/tg.live.MTIz/messages?format=chatlab`。同一个聊天出现在不同 Telegram 来源时，ID 仍各自独立。ChatLab 当前界面只提供私聊/群聊筛选；API 返回的频道会话可能不在其可选列表中。
+在 ChatLab 中填写 `http://127.0.0.1:5031/api/v1` 作为远程数据源地址和 WeFlow 的 API Token，无需手动拼接 Telegram 来源 ID。例如根会话列表返回 `tg.live.MTIz` 时，ChatLab 将请求 `/api/v1/sessions/tg.live.MTIz/messages?format=chatlab`。同一个聊天出现在不同 Telegram 来源时，ID 仍各自独立。Telegram 频道会出现在 ChatLab 的群聊筛选中，其消息也以群聊元数据导入；WeFlow 原始缓存和普通 JSON 接口保留频道类型。
 
 先获取可用数据源：
 

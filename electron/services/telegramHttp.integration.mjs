@@ -186,7 +186,9 @@ test('Telegram HTTP API 使用现有鉴权并隔离导入源', async () => {
     assert.equal((await request('/api/v1/sessions?format=chatlab&keyword=%E6%89%B9%E9%87%8F%E4%BC%9A%E8%AF%9D%204999&platform=telegram')).body.sessions.length, 1)
     const channel = await request('/api/v1/sessions?format=chatlab&platform=telegram&keyword=%E6%89%B9%E9%87%8F%E4%BC%9A%E8%AF%9D%200')
     assert.equal(channel.body.sessions.length, 1)
-    assert.equal(channel.body.sessions[0].type, 'channel')
+    assert.equal(channel.body.sessions[0].type, 'group')
+    const channelRaw = await request('/api/v1/telegram/sources/live/sessions?keyword=%E6%89%B9%E9%87%8F%E4%BC%9A%E8%AF%9D%200')
+    assert.equal(channelRaw.body.sessions[0].kind, 'channel')
     const channelMessages = Array.from({ length: 5999 }, (_, index) => ({
       id: index + 1,
       date: 2000 + Math.floor(index / 10),
@@ -198,6 +200,9 @@ test('Telegram HTTP API 使用现有鉴权并隔离导入源', async () => {
     await store.upsertMessages('live', 'bulk:0', channelMessages)
     const refreshedChannel = await request('/api/v1/sessions?format=chatlab&platform=telegram&keyword=%E6%89%B9%E9%87%8F%E4%BC%9A%E8%AF%9D%200')
     assert.equal(refreshedChannel.body.sessions[0].messageCount, 5999)
+    const firstChannelPull = await request(`/api/v1/sessions/${refreshedChannel.body.sessions[0].id}/messages?format=chatlab&limit=1`)
+    assert.equal(firstChannelPull.body.meta.type, 'group')
+    assert.equal(firstChannelPull.body.meta.groupId, 'bulk:0')
     let messageOffset = 0
     const receivedIds = new Set()
     for (;;) {
