@@ -1,10 +1,7 @@
 export type BackgroundTaskSourcePage =
   | 'export'
   | 'chat'
-  | 'analytics'
   | 'sns'
-  | 'groupAnalytics'
-  | 'annualReport'
   | 'other'
 
 export type BackgroundTaskStatus =

@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BarChart3, Download, FileJson, LogOut, MessageSquare, RefreshCw, Search, Settings2, Trash2, Upload, X } from 'lucide-react'
+import { Download, FileJson, LogOut, MessageSquare, RefreshCw, Search, Settings2, Trash2, Upload, X } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 import type { TelegramAuthStep, TelegramMessage, TelegramProgress, TelegramSource, TelegramStatus, TelegramSyncRange } from '../../shared/telegram'
 import './TelegramPage.scss'
 
 const api = window.electronAPI.telegram
-type View = 'chat' | 'analytics' | 'export'
-type Summary = { total: number; media: number; activeDays: number; days: Array<{ label: string; count: number }> }
+type View = 'chat' | 'export'
 const authLabels: Record<TelegramAuthStep, string> = { code: 'Telegram 验证码', password: '两步验证密码', email: '验证邮箱', emailCode: '邮箱验证码' }
 
 function dateLabel(seconds: number): string {
@@ -41,7 +40,6 @@ function TelegramPage() {
   const [apiHash, setApiHash] = useState('')
   const [phone, setPhone] = useState('')
   const [format, setFormat] = useState<'json' | 'csv' | 'md'>('json')
-  const [summary, setSummary] = useState<Summary | null>(null)
 
   useEffect(() => {
     const removeChanged = api.onChanged(() => setRevision(value => value + 1))
@@ -81,37 +79,6 @@ function TelegramPage() {
   const chat = source?.chats.find(item => item.id === chatId)
   const chats = useMemo(() => [...(source?.chats || [])].sort((a, b) => b.lastMessageAt - a.lastMessageAt), [source])
   const filteredChats = chats.filter(item => item.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
-
-  useEffect(() => {
-    if (view !== 'analytics' || !source) return
-    let cancelled = false
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        let total = 0, media = 0
-        const days = new Map<string, number>()
-        for (const item of source.chats) {
-          const items = await api.messages(source.id, item.id)
-          if (cancelled) return
-          total += items.length
-          for (const message of items) {
-            if (message.kind !== 'text' && message.kind !== 'service') media++
-            if (message.date) {
-              const day = new Date(message.date * 1000).toLocaleDateString('sv-SE')
-              days.set(day, (days.get(day) || 0) + 1)
-            }
-          }
-        }
-        const recent = Array.from({ length: 7 }, (_, index) => {
-          const day = new Date()
-          day.setDate(day.getDate() - (6 - index))
-          const key = day.toLocaleDateString('sv-SE')
-          return { label: `${day.getMonth() + 1}/${day.getDate()}`, count: days.get(key) || 0 }
-        })
-        if (!cancelled) setSummary({ total, media, activeDays: days.size, days: recent })
-      })().catch(cause => { if (!cancelled) setError(String(cause?.message || cause)) })
-    }, 200)
-    return () => { cancelled = true; window.clearTimeout(timer) }
-  }, [source, view])
 
   async function run(action: () => Promise<unknown>): Promise<void> {
     setError('')
@@ -191,12 +158,12 @@ function TelegramPage() {
     <div className="telegram-page">
       <header className="tg-toolbar">
         <div className="tg-title">Telegram</div>
-        <select aria-label="数据源" value={sourceId} onChange={event => { setSourceId(event.target.value); setChatId(''); setSummary(null) }}>
+        <select aria-label="数据源" value={sourceId} onChange={event => { setSourceId(event.target.value); setChatId('') }}>
           {!sourceId && <option value="">选择数据源</option>}
           {sources.map(item => <option key={item.id} value={item.id}>{item.kind === 'account' ? '账号 · ' : '导入 · '}{item.label}</option>)}
         </select>
         <div className="tg-view-tabs" role="tablist" aria-label="Telegram 视图">
-          {([['chat', '聊天', MessageSquare], ['analytics', '分析', BarChart3], ['export', '导出', Download]] as const).map(([id, label, Icon]) => (
+          {([['chat', '聊天', MessageSquare], ['export', '导出', Download]] as const).map(([id, label, Icon]) => (
             <button key={id} role="tab" aria-selected={view === id} className={view === id ? 'active' : ''} onClick={() => setView(id)}><Icon size={15} />{label}</button>
           ))}
         </div>
@@ -267,14 +234,6 @@ function TelegramPage() {
               )} />
             </> : <div className="tg-empty">选择会话</div>}
           </section>
-        </div>
-      )}
-
-      {view === 'analytics' && source && (
-        <div className="tg-analysis"><div className="tg-section-title"><h2>聊天分析</h2><span>{source.label}{source.kind === 'account' && ' · 以已同步消息为准'}</span></div>
-          <div className="tg-stats"><div><span>会话</span><strong>{source.chats.length}</strong></div><div><span>消息</span><strong>{summary?.total ?? '…'}</strong></div><div><span>媒体</span><strong>{summary?.media ?? '…'}</strong></div><div><span>活跃天数</span><strong>{summary?.activeDays ?? '…'}</strong></div></div>
-          <h3>最近 7 天</h3><div className="tg-bars">{summary?.days.map(day => <div key={day.label}><div className="tg-bar-track"><span style={{ height: `${Math.max(day.count ? 6 : 0, day.count / Math.max(1, ...summary.days.map(d => d.count)) * 100)}%` }} /></div><small>{day.label}</small><b>{day.count}</b></div>)}</div>
-          <h3>活跃会话</h3><div className="tg-ranked">{[...source.chats].sort((a, b) => b.messageCount - a.messageCount).slice(0, 10).map((item, index) => <div key={item.id}><span>{index + 1}</span><strong>{item.title}</strong><span>{item.messageCount}</span></div>)}</div>
         </div>
       )}
 

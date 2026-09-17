@@ -461,27 +461,6 @@ export class WcdbService {
   }
 
   /**
-   * 获取年度报告统计
-   */
-  async getAnnualReportStats(sessionIds: string[], beginTimestamp: number = 0, endTimestamp: number = 0): Promise<{ success: boolean; data?: any; error?: string }> {
-    return this.callWorker('getAnnualReportStats', { sessionIds, beginTimestamp, endTimestamp })
-  }
-
-  /**
-   * 获取年度报告扩展数据
-   */
-  async getAnnualReportExtras(sessionIds: string[], beginTimestamp: number, endTimestamp: number, peakDayBegin: number, peakDayEnd: number): Promise<{ success: boolean; data?: any; error?: string }> {
-    return this.callWorker('getAnnualReportExtras', { sessionIds, beginTimestamp, endTimestamp, peakDayBegin, peakDayEnd })
-  }
-
-  /**
-   * 获取双人报告统计数据
-   */
-  async getDualReportStats(sessionId: string, beginTimestamp: number, endTimestamp: number): Promise<{ success: boolean; data?: any; error?: string }> {
-    return this.callWorker('getDualReportStats', { sessionId, beginTimestamp, endTimestamp })
-  }
-
-  /**
    * 获取群聊统计
    */
   async getGroupStats(chatroomId: string, beginTimestamp: number = 0, endTimestamp: number = 0): Promise<{ success: boolean; data?: any; error?: string }> {
@@ -621,13 +600,6 @@ export class WcdbService {
    */
   async getSnsTimeline(limit: number, offset: number, usernames?: string[], keyword?: string, startTime?: number, endTime?: number): Promise<{ success: boolean; timeline?: any[]; error?: string }> {
     return this.callWorker('getSnsTimeline', { limit, offset, usernames, keyword, startTime, endTime })
-  }
-
-  /**
-   * 获取朋友圈年度统计
-   */
-  async getSnsAnnualStats(beginTimestamp: number, endTimestamp: number): Promise<{ success: boolean; data?: any; error?: string }> {
-    return this.callWorker('getSnsAnnualStats', { beginTimestamp, endTimestamp })
   }
 
   async getSnsUsernames(): Promise<{ success: boolean; usernames?: string[]; error?: string }> {

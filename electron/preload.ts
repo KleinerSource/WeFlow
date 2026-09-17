@@ -469,47 +469,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('groupAnalytics:exportGroupMemberMessages', chatroomId, memberUsername, outputPath, startTime, endTime)
   },
 
-  // 年度报告
-  annualReport: {
-    getAvailableYears: () => ipcRenderer.invoke('annualReport:getAvailableYears'),
-    startAvailableYearsLoad: () => ipcRenderer.invoke('annualReport:startAvailableYearsLoad'),
-    cancelAvailableYearsLoad: (taskId: string) => ipcRenderer.invoke('annualReport:cancelAvailableYearsLoad', taskId),
-    generateReport: (year: number) => ipcRenderer.invoke('annualReport:generateReport', year),
-    exportImages: (payload: { baseDir: string; folderName: string; images: Array<{ name: string; dataUrl: string }> }) =>
-      ipcRenderer.invoke('annualReport:exportImages', payload),
-    captureCurrentWindow: () => ipcRenderer.invoke('annualReport:captureCurrentWindow'),
-    onAvailableYearsProgress: (callback: (payload: {
-      taskId: string
-      years?: number[]
-      done: boolean
-      error?: string
-      canceled?: boolean
-      strategy?: 'cache' | 'native' | 'hybrid'
-      phase?: 'cache' | 'native' | 'scan' | 'done'
-      statusText?: string
-      nativeElapsedMs?: number
-      scanElapsedMs?: number
-      totalElapsedMs?: number
-      switched?: boolean
-      nativeTimedOut?: boolean
-    }) => void) => {
-      ipcRenderer.on('annualReport:availableYearsProgress', (_, payload) => callback(payload))
-      return () => ipcRenderer.removeAllListeners('annualReport:availableYearsProgress')
-    },
-    onProgress: (callback: (payload: { status: string; progress: number }) => void) => {
-      ipcRenderer.on('annualReport:progress', (_, payload) => callback(payload))
-      return () => ipcRenderer.removeAllListeners('annualReport:progress')
-    }
-  },
-  dualReport: {
-    generateReport: (payload: { friendUsername: string; year: number }) =>
-      ipcRenderer.invoke('dualReport:generateReport', payload),
-    onProgress: (callback: (payload: { status: string; progress: number }) => void) => {
-      ipcRenderer.on('dualReport:progress', (_, payload) => callback(payload))
-      return () => ipcRenderer.removeAllListeners('dualReport:progress')
-    }
-  },
-
   // 导出
   export: {
     getExportStats: (sessionIds: string[], options: any) =>

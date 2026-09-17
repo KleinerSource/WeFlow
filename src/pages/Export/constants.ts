@@ -101,10 +101,7 @@ export const defaultTxtColumns = ['index', 'time', 'senderRole', 'messageType', 
 export const backgroundTaskSourceLabels: Record<string, string> = {
   export: '导出页',
   chat: '聊天页',
-  analytics: '分析页',
   sns: '朋友圈页',
-  groupAnalytics: '群分析页',
-  annualReport: '年度报告',
   other: '其他页面'
 }
 

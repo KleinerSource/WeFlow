@@ -14,7 +14,6 @@ import { imageDecryptService } from './services/imageDecryptService'
 import { imagePreloadService } from './services/imagePreloadService'
 import { analyticsService } from './services/analyticsService'
 import { groupAnalyticsService } from './services/groupAnalyticsService'
-import { annualReportService } from './services/annualReportService'
 import { exportService, ExportOptions, ExportProgress } from './services/export'
 import { exportTaskControlService } from './services/exportTaskControlService'
 import { KeyService } from './services/keyService'
@@ -801,32 +800,6 @@ const getDialogReleaseNotes = (rawReleaseNotes: unknown): string => {
   return normalizeReleaseNotes(rawReleaseNotes)
 }
 
-type AnnualReportYearsLoadStrategy = 'cache' | 'native' | 'hybrid'
-type AnnualReportYearsLoadPhase = 'cache' | 'native' | 'scan' | 'done'
-
-interface AnnualReportYearsProgressPayload {
-  years?: number[]
-  done: boolean
-  error?: string
-  canceled?: boolean
-  strategy?: AnnualReportYearsLoadStrategy
-  phase?: AnnualReportYearsLoadPhase
-  statusText?: string
-  nativeElapsedMs?: number
-  scanElapsedMs?: number
-  totalElapsedMs?: number
-  switched?: boolean
-  nativeTimedOut?: boolean
-}
-
-interface AnnualReportYearsTaskState {
-  cacheKey: string
-  canceled: boolean
-  done: boolean
-  snapshot: AnnualReportYearsProgressPayload
-  updatedAt: number
-}
-
 interface OpenSessionChatWindowOptions {
   source?: 'chat' | 'export'
   initialDisplayName?: string
@@ -868,72 +841,6 @@ const loadSessionChatWindowContent = (
   })
 }
 
-const annualReportYearsLoadTasks = new Map<string, AnnualReportYearsTaskState>()
-const annualReportYearsTaskByCacheKey = new Map<string, string>()
-const annualReportYearsSnapshotCache = new Map<string, { snapshot: AnnualReportYearsProgressPayload; updatedAt: number; taskId: string }>()
-const annualReportYearsSnapshotTtlMs = 10 * 60 * 1000
-
-const normalizeAnnualReportYearsSnapshot = (snapshot: AnnualReportYearsProgressPayload): AnnualReportYearsProgressPayload => {
-  const years = Array.isArray(snapshot.years) ? [...snapshot.years] : []
-  return { ...snapshot, years }
-}
-
-const buildAnnualReportYearsCacheKey = (dbPath: string, wxid: string): string => {
-  return `${String(dbPath || '').trim()}\u0001${String(wxid || '').trim()}`
-}
-
-const pruneAnnualReportYearsSnapshotCache = (): void => {
-  const now = Date.now()
-  for (const [cacheKey, entry] of annualReportYearsSnapshotCache.entries()) {
-    if (now - entry.updatedAt > annualReportYearsSnapshotTtlMs) {
-      annualReportYearsSnapshotCache.delete(cacheKey)
-    }
-  }
-}
-
-const persistAnnualReportYearsSnapshot = (
-  cacheKey: string,
-  taskId: string,
-  snapshot: AnnualReportYearsProgressPayload
-): void => {
-  annualReportYearsSnapshotCache.set(cacheKey, {
-    taskId,
-    snapshot: normalizeAnnualReportYearsSnapshot(snapshot),
-    updatedAt: Date.now()
-  })
-  pruneAnnualReportYearsSnapshotCache()
-}
-
-const getAnnualReportYearsSnapshot = (
-  cacheKey: string
-): { taskId: string; snapshot: AnnualReportYearsProgressPayload } | null => {
-  pruneAnnualReportYearsSnapshotCache()
-  const entry = annualReportYearsSnapshotCache.get(cacheKey)
-  if (!entry) return null
-  return {
-    taskId: entry.taskId,
-    snapshot: normalizeAnnualReportYearsSnapshot(entry.snapshot)
-  }
-}
-
-const broadcastAnnualReportYearsProgress = (
-  taskId: string,
-  payload: AnnualReportYearsProgressPayload
-): void => {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue
-    win.webContents.send('annualReport:availableYearsProgress', {
-      taskId,
-      ...payload
-    })
-  }
-}
-
-const isYearsLoadCanceled = (taskId: string): boolean => {
-  const task = annualReportYearsLoadTasks.get(taskId)
-  return task?.canceled === true
-}
-
 const setupCustomTitleBarWindow = (win: BrowserWindow): void => {
   if (process.platform === 'darwin') {
     win.setWindowButtonVisibility(false)
@@ -972,14 +879,10 @@ const focusMainWindowAndNavigateRoute = (route: string): void => {
 
 const handleNotificationClickNavigation = (payload: unknown): void => {
   if (payload && typeof payload === 'object') {
-    const data = payload as { sessionId?: string; channel?: string; insightRecordId?: string; targetRoute?: string }
+    const data = payload as { sessionId?: string; channel?: string; targetRoute?: string }
     const targetRoute = String(data.targetRoute || '').trim()
     if (targetRoute.startsWith('/')) {
       focusMainWindowAndNavigateRoute(targetRoute)
-      return
-    }
-    if (data.channel === 'ai-insight' && data.insightRecordId) {
-      focusMainWindowAndNavigateRoute(`/insight-inbox?recordId=${encodeURIComponent(String(data.insightRecordId))}`)
       return
     }
     focusMainWindowAndNavigate(String(data.sessionId || ''))
@@ -4125,383 +4028,6 @@ function registerIpcHandlers() {
     return true
   })
 
-  // 年度报告相关
-  ipcMain.handle('annualReport:getAvailableYears', async () => {
-    const cfg = configService || new ConfigService()
-    configService = cfg
-    return annualReportService.getAvailableYears({
-      dbPath: cfg.get('dbPath'),
-      decryptKey: cfg.get('decryptKey'),
-      wxid: cfg.getMyWxidCleaned()
-    })
-  })
-
-  ipcMain.handle('annualReport:startAvailableYearsLoad', async (event) => {
-    const cfg = configService || new ConfigService()
-    configService = cfg
-
-    const dbPath = cfg.get('dbPath')
-    const decryptKey = cfg.get('decryptKey')
-    const wxid = cfg.get('myWxid')
-    const cacheKey = buildAnnualReportYearsCacheKey(dbPath, wxid)
-
-    const runningTaskId = annualReportYearsTaskByCacheKey.get(cacheKey)
-    if (runningTaskId) {
-      const runningTask = annualReportYearsLoadTasks.get(runningTaskId)
-      if (runningTask && !runningTask.done) {
-        return {
-          success: true,
-          taskId: runningTaskId,
-          reused: true,
-          snapshot: normalizeAnnualReportYearsSnapshot(runningTask.snapshot)
-        }
-      }
-      annualReportYearsTaskByCacheKey.delete(cacheKey)
-    }
-
-    const cachedSnapshot = getAnnualReportYearsSnapshot(cacheKey)
-    if (cachedSnapshot && cachedSnapshot.snapshot.done) {
-      return {
-        success: true,
-        taskId: cachedSnapshot.taskId,
-        reused: true,
-        snapshot: normalizeAnnualReportYearsSnapshot(cachedSnapshot.snapshot)
-      }
-    }
-
-    const taskId = `years_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-    const initialSnapshot: AnnualReportYearsProgressPayload = cachedSnapshot?.snapshot && !cachedSnapshot.snapshot.done
-      ? {
-        ...normalizeAnnualReportYearsSnapshot(cachedSnapshot.snapshot),
-        done: false,
-        canceled: false,
-        error: undefined
-      }
-      : {
-        years: [],
-        done: false,
-        strategy: 'native',
-        phase: 'native',
-        statusText: '准备使用原生快速模式加载年份...',
-        nativeElapsedMs: 0,
-        scanElapsedMs: 0,
-        totalElapsedMs: 0,
-        switched: false,
-        nativeTimedOut: false
-      }
-
-    const updateTaskSnapshot = (payload: AnnualReportYearsProgressPayload): AnnualReportYearsProgressPayload | null => {
-      const task = annualReportYearsLoadTasks.get(taskId)
-      if (!task) return null
-
-      const hasPayloadYears = Array.isArray(payload.years)
-      const nextYears = (hasPayloadYears && (payload.done || (payload.years || []).length > 0))
-        ? [...(payload.years || [])]
-        : Array.isArray(task.snapshot.years) ? [...task.snapshot.years] : []
-
-      const nextSnapshot: AnnualReportYearsProgressPayload = normalizeAnnualReportYearsSnapshot({
-        ...task.snapshot,
-        ...payload,
-        years: nextYears
-      })
-      task.snapshot = nextSnapshot
-      task.done = nextSnapshot.done === true
-      task.updatedAt = Date.now()
-      annualReportYearsLoadTasks.set(taskId, task)
-      persistAnnualReportYearsSnapshot(task.cacheKey, taskId, nextSnapshot)
-      return nextSnapshot
-    }
-
-    annualReportYearsLoadTasks.set(taskId, {
-      cacheKey,
-      canceled: false,
-      done: false,
-      snapshot: normalizeAnnualReportYearsSnapshot(initialSnapshot),
-      updatedAt: Date.now()
-    })
-    annualReportYearsTaskByCacheKey.set(cacheKey, taskId)
-    persistAnnualReportYearsSnapshot(cacheKey, taskId, initialSnapshot)
-
-    void (async () => {
-      try {
-        const result = await annualReportService.getAvailableYears({
-          dbPath,
-          decryptKey,
-          wxid,
-          onProgress: (progress) => {
-            if (isYearsLoadCanceled(taskId)) return
-            const snapshot = updateTaskSnapshot({
-              ...progress,
-              done: false
-            })
-            if (!snapshot) return
-            broadcastAnnualReportYearsProgress(taskId, snapshot)
-          },
-          shouldCancel: () => isYearsLoadCanceled(taskId)
-        })
-
-        const canceled = isYearsLoadCanceled(taskId)
-        if (canceled) {
-          const snapshot = updateTaskSnapshot({
-            done: true,
-            canceled: true,
-            phase: 'done',
-            statusText: '已取消年份加载'
-          })
-          if (snapshot) {
-            broadcastAnnualReportYearsProgress(taskId, snapshot)
-          }
-          return
-        }
-
-        const completionPayload: AnnualReportYearsProgressPayload = result.success
-          ? {
-            years: result.data || [],
-            done: true,
-            strategy: result.meta?.strategy,
-            phase: 'done',
-            statusText: result.meta?.statusText || '年份数据加载完成',
-            nativeElapsedMs: result.meta?.nativeElapsedMs,
-            scanElapsedMs: result.meta?.scanElapsedMs,
-            totalElapsedMs: result.meta?.totalElapsedMs,
-            switched: result.meta?.switched,
-            nativeTimedOut: result.meta?.nativeTimedOut
-          }
-          : {
-            years: result.data || [],
-            done: true,
-            error: result.error || '加载年度数据失败',
-            strategy: result.meta?.strategy,
-            phase: 'done',
-            statusText: result.meta?.statusText || '年份数据加载失败',
-            nativeElapsedMs: result.meta?.nativeElapsedMs,
-            scanElapsedMs: result.meta?.scanElapsedMs,
-            totalElapsedMs: result.meta?.totalElapsedMs,
-            switched: result.meta?.switched,
-            nativeTimedOut: result.meta?.nativeTimedOut
-          }
-
-        const snapshot = updateTaskSnapshot(completionPayload)
-        if (snapshot) {
-          broadcastAnnualReportYearsProgress(taskId, snapshot)
-        }
-      } catch (e) {
-        const snapshot = updateTaskSnapshot({
-          done: true,
-          error: String(e),
-          phase: 'done',
-          statusText: '年份数据加载失败',
-          strategy: 'hybrid'
-        })
-        if (snapshot) {
-          broadcastAnnualReportYearsProgress(taskId, snapshot)
-        }
-      } finally {
-        const task = annualReportYearsLoadTasks.get(taskId)
-        if (task) {
-          annualReportYearsTaskByCacheKey.delete(task.cacheKey)
-        }
-        annualReportYearsLoadTasks.delete(taskId)
-      }
-    })()
-
-    return {
-      success: true,
-      taskId,
-      reused: false,
-      snapshot: normalizeAnnualReportYearsSnapshot(initialSnapshot)
-    }
-  })
-
-  ipcMain.handle('annualReport:cancelAvailableYearsLoad', async (_, taskId: string) => {
-    const key = String(taskId || '').trim()
-    if (!key) return { success: false, error: '任务ID不能为空' }
-    const task = annualReportYearsLoadTasks.get(key)
-    if (!task) return { success: true }
-    task.canceled = true
-    annualReportYearsLoadTasks.set(key, task)
-    return { success: true }
-  })
-
-  ipcMain.handle('annualReport:generateReport', async (_, year: number) => {
-    const cfg = configService || new ConfigService()
-    configService = cfg
-
-    const dbPath = cfg.get('dbPath')
-    const decryptKey = cfg.get('decryptKey')
-    const wxid = cfg.getMyWxidCleaned()
-    const logEnabled = cfg.get('logEnabled')
-
-    const resourcesPath = app.isPackaged
-      ? join(process.resourcesPath, 'resources')
-      : join(app.getAppPath(), 'resources')
-    const userDataPath = app.getPath('userData')
-
-    const workerPath = join(__dirname, 'annualReportWorker.js')
-
-    return await new Promise((resolve) => {
-      const worker = new Worker(workerPath, {
-        workerData: { year, dbPath, decryptKey, myWxid: wxid, resourcesPath, userDataPath, logEnabled }
-      })
-
-      const cleanup = () => {
-        worker.removeAllListeners()
-      }
-
-      worker.on('message', (msg: any) => {
-        if (msg && msg.type === 'annualReport:progress') {
-          for (const win of BrowserWindow.getAllWindows()) {
-            if (!win.isDestroyed()) {
-              win.webContents.send('annualReport:progress', msg.data)
-            }
-          }
-          return
-        }
-        if (msg && (msg.type === 'annualReport:result' || msg.type === 'done')) {
-          cleanup()
-          void worker.terminate()
-          resolve(msg.data ?? msg.result)
-          return
-        }
-        if (msg && (msg.type === 'annualReport:error' || msg.type === 'error')) {
-          cleanup()
-          void worker.terminate()
-          resolve({ success: false, error: msg.error || '年度报告生成失败' })
-        }
-      })
-
-      worker.on('error', (err) => {
-        cleanup()
-        resolve({ success: false, error: String(err) })
-      })
-
-      worker.on('exit', (code) => {
-        if (code !== 0) {
-          cleanup()
-          resolve({ success: false, error: `年度报告线程异常退出: ${code}` })
-        }
-      })
-    })
-  })
-
-  ipcMain.handle('dualReport:generateReport', async (_, payload: { friendUsername: string; year: number }) => {
-    const cfg = configService || new ConfigService()
-    configService = cfg
-
-    const dbPath = cfg.get('dbPath')
-    const decryptKey = cfg.get('decryptKey')
-    const wxid = cfg.getMyWxidCleaned()
-    const logEnabled = cfg.get('logEnabled')
-    const friendUsername = payload?.friendUsername
-    const year = payload?.year ?? 0
-    const excludeWords = cfg.get('wordCloudExcludeWords') || []
-
-    if (!friendUsername) {
-      return { success: false, error: '缺少好友用户名' }
-    }
-
-    const resourcesPath = app.isPackaged
-      ? join(process.resourcesPath, 'resources')
-      : join(app.getAppPath(), 'resources')
-    const userDataPath = app.getPath('userData')
-
-    const workerPath = join(__dirname, 'dualReportWorker.js')
-
-    return await new Promise((resolve) => {
-      const worker = new Worker(workerPath, {
-        workerData: { year, friendUsername, dbPath, decryptKey, myWxid: wxid, resourcesPath, userDataPath, logEnabled, excludeWords }
-      })
-
-      const cleanup = () => {
-        worker.removeAllListeners()
-      }
-
-      worker.on('message', (msg: any) => {
-        if (msg && msg.type === 'dualReport:progress') {
-          for (const win of BrowserWindow.getAllWindows()) {
-            if (!win.isDestroyed()) {
-              win.webContents.send('dualReport:progress', msg.data)
-            }
-          }
-          return
-        }
-        if (msg && (msg.type === 'dualReport:result' || msg.type === 'done')) {
-          cleanup()
-          void worker.terminate()
-          resolve(msg.data ?? msg.result)
-          return
-        }
-        if (msg && (msg.type === 'dualReport:error' || msg.type === 'error')) {
-          cleanup()
-          void worker.terminate()
-          resolve({ success: false, error: msg.error || '双人报告生成失败' })
-        }
-      })
-
-      worker.on('error', (err) => {
-        cleanup()
-        resolve({ success: false, error: String(err) })
-      })
-
-      worker.on('exit', (code) => {
-        if (code !== 0) {
-          cleanup()
-          resolve({ success: false, error: `双人报告线程异常退出: ${code}` })
-        }
-      })
-    })
-  })
-
-  ipcMain.handle('annualReport:exportImages', async (_, payload: { baseDir: string; folderName: string; images: Array<{ name: string; dataUrl: string }> }) => {
-    try {
-      const { baseDir, folderName, images } = payload
-      if (!baseDir || !folderName || !Array.isArray(images) || images.length === 0) {
-        return { success: false, error: '导出参数无效' }
-      }
-
-      let targetDir = join(baseDir, folderName)
-      if (existsSync(targetDir)) {
-        let idx = 2
-        while (existsSync(`${targetDir}_${idx}`)) idx++
-        targetDir = `${targetDir}_${idx}`
-      }
-
-      await mkdir(targetDir, { recursive: true })
-
-      for (const img of images) {
-        const dataUrl = img.dataUrl || ''
-        const commaIndex = dataUrl.indexOf(',')
-        if (commaIndex <= 0) continue
-        const base64 = dataUrl.slice(commaIndex + 1)
-        const buffer = Buffer.from(base64, 'base64')
-        const filePath = join(targetDir, img.name)
-        await writeFile(filePath, buffer)
-      }
-
-      return { success: true, dir: targetDir }
-    } catch (e) {
-      return { success: false, error: String(e) }
-    }
-  })
-
-  ipcMain.handle('annualReport:captureCurrentWindow', async (event) => {
-    try {
-      const win = BrowserWindow.fromWebContents(event.sender)
-      if (!win || win.isDestroyed()) {
-        return { success: false, error: '窗口不可用' }
-      }
-
-      const image = await win.webContents.capturePage()
-      return {
-        success: true,
-        dataUrl: image.toDataURL(),
-        size: image.getSize()
-      }
-    } catch (e) {
-      return { success: false, error: String(e) }
-    }
-  })
-
   // 密钥获取
   ipcMain.handle('key:autoGetDbKey', async (event) => {
     return keyService.autoGetDbKey(180_000, (message: string, level: number) => {
@@ -4658,7 +4184,6 @@ app.whenReady().then(async () => {
   registerIpcHandlers()
   chatService.addDbMonitorListener((type, json) => {
     messagePushService.handleDbMonitorChange(type, json)
-    insightService.handleDbMonitorChange(type, json)
   })
 
   // 提前创建主窗口（隐藏），让渲染进程加载与数据库预热并行进行
@@ -4771,7 +4296,6 @@ app.whenReady().then(async () => {
 
   // 依赖数据库的后台服务在窗口显示后再启动，避免与启动预热争抢数据库 worker
   messagePushService.start()
-  insightService.start()
   groupSummaryService.start()
   if (configService.get('autoDownloadHighRes')) {
     const whitelistArr = configService.get('autoDownloadWhitelist') || []
@@ -4810,7 +4334,6 @@ const shutdownAppServices = async (): Promise<void> => {
     // 通知窗使用 hide 而非 close，退出时主动销毁，避免残留窗口阻塞进程退出。
     destroyNotificationWindow()
     messagePushService.stop()
-    insightService.stop()
     groupSummaryService.stop()
     // 兜底：5秒后强制退出，防止某个异步任务卡住导致进程残留
     const forceExitTimer = setTimeout(() => {

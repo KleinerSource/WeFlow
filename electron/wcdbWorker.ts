@@ -167,15 +167,6 @@ if (parentPort) {
                 case 'getAvailableYears':
                     result = await core.getAvailableYears(payload.sessionIds)
                     break
-                case 'getAnnualReportStats':
-                    result = await core.getAnnualReportStats(payload.sessionIds, payload.beginTimestamp, payload.endTimestamp)
-                    break
-                case 'getAnnualReportExtras':
-                    result = await core.getAnnualReportExtras(payload.sessionIds, payload.beginTimestamp, payload.endTimestamp, payload.peakDayBegin, payload.peakDayEnd)
-                    break
-                case 'getDualReportStats':
-                    result = await core.getDualReportStats(payload.sessionId, payload.beginTimestamp, payload.endTimestamp)
-                    break
                 case 'getGroupStats':
                     result = await core.getGroupStats(payload.chatroomId, payload.beginTimestamp, payload.endTimestamp)
                     break
@@ -244,9 +235,6 @@ if (parentPort) {
                     break
                 case 'getSnsTimeline':
                     result = await core.getSnsTimeline(payload.limit, payload.offset, payload.usernames, payload.keyword, payload.startTime, payload.endTime)
-                    break
-                case 'getSnsAnnualStats':
-                    result = await core.getSnsAnnualStats(payload.beginTimestamp, payload.endTimestamp)
                     break
                 case 'getSnsUsernames':
                     result = await core.getSnsUsernames()

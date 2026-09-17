@@ -1,7 +1,6 @@
 import React from 'react'
 import {
   Aperture,
-  BarChart3,
   Calendar,
   Download,
   Image as ImageIcon,
@@ -11,7 +10,6 @@ import {
   Newspaper,
   RefreshCw,
   Search,
-  Sparkles,
   Users
 } from 'lucide-react'
 import { Avatar } from '../../components/Avatar'
@@ -39,14 +37,11 @@ export interface ChatHeaderProps {
   batchVoiceProgress?: { current: number; total: number }
   isBatchDecrypting: boolean
   batchImageDecryptProgress?: { current: number; total: number }
-  isTriggeringSessionInsight: boolean
   isRefreshingMessages: boolean
   isLoadingMessages: boolean
   currentSessionId?: string | null
   jumpCalendarWrapRef: React.RefObject<HTMLDivElement | null>
-  onTriggerSessionInsight: () => void
   onToggleGroupSummaryPanel: () => void
-  onGroupAnalytics: () => void
   onToggleGroupMembersPanel: () => void
   onExportCurrentSession: () => void
   onOpenSnsTimeline: () => void
@@ -78,14 +73,11 @@ function ChatHeader({
   batchVoiceProgress,
   isBatchDecrypting,
   batchImageDecryptProgress,
-  isTriggeringSessionInsight,
   isRefreshingMessages,
   isLoadingMessages,
   currentSessionId,
   jumpCalendarWrapRef,
-  onTriggerSessionInsight,
   onToggleGroupSummaryPanel,
-  onGroupAnalytics,
   onToggleGroupMembersPanel,
   onExportCurrentSession,
   onOpenSnsTimeline,
@@ -128,15 +120,6 @@ function ChatHeader({
         {isGroupChat && <div className="header-subtitle">群聊</div>}
       </div>
       <div className="header-actions">
-        <button
-          className={`icon-btn session-insight-btn${isTriggeringSessionInsight ? ' triggering' : ''}`}
-          onClick={onTriggerSessionInsight}
-          disabled={!currentSessionId || isTriggeringSessionInsight}
-          title={isTriggeringSessionInsight ? '正在生成 AI 见解' : '立即触发当前聊天 AI 见解'}
-          aria-label="立即触发当前聊天 AI 见解"
-        >
-          {isTriggeringSessionInsight ? <Loader2 size={18} className="spin" /> : <Sparkles size={18} />}
-        </button>
         {isGroupChat && aiGroupSummaryEnabled && (
           <button
             className={`icon-btn group-summary-btn ${showGroupSummaryPanel ? 'active' : ''}`}
@@ -146,11 +129,6 @@ function ChatHeader({
             aria-label="AI 群聊总结"
           >
             <Newspaper size={18} />
-          </button>
-        )}
-        {!standaloneSessionWindow && isGroupChat && (
-          <button className="icon-btn group-analytics-btn" onClick={onGroupAnalytics} title="群聊分析">
-            <BarChart3 size={18} />
           </button>
         )}
         {isGroupChat && (
@@ -282,14 +260,11 @@ function areEqual(prev: ChatHeaderProps, next: ChatHeaderProps) {
     prev.isBatchDecrypting === next.isBatchDecrypting &&
     prev.batchImageDecryptProgress?.current === next.batchImageDecryptProgress?.current &&
     prev.batchImageDecryptProgress?.total === next.batchImageDecryptProgress?.total &&
-    prev.isTriggeringSessionInsight === next.isTriggeringSessionInsight &&
     prev.isRefreshingMessages === next.isRefreshingMessages &&
     prev.isLoadingMessages === next.isLoadingMessages &&
     prev.currentSessionId === next.currentSessionId &&
     prev.jumpCalendarWrapRef === next.jumpCalendarWrapRef &&
-    prev.onTriggerSessionInsight === next.onTriggerSessionInsight &&
     prev.onToggleGroupSummaryPanel === next.onToggleGroupSummaryPanel &&
-    prev.onGroupAnalytics === next.onGroupAnalytics &&
     prev.onToggleGroupMembersPanel === next.onToggleGroupMembersPanel &&
     prev.onExportCurrentSession === next.onExportCurrentSession &&
     prev.onOpenSnsTimeline === next.onOpenSnsTimeline &&

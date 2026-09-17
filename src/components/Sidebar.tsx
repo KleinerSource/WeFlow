@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Home, MessageSquare, Send, BarChart3, FileText, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, FolderClosed, Footprints, Users, ArchiveRestore, Sparkles } from 'lucide-react'
+import { Home, MessageSquare, Send, Settings, Download, Aperture, UserCircle, Lock, LockOpen, ChevronUp, FolderClosed, Footprints, Users, ArchiveRestore } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import * as configService from '../services/config'
 import { onExportSessionStatus, requestExportSessionStatus } from '../services/exportBridge'
@@ -354,15 +354,6 @@ function Sidebar({ collapsed }: SidebarProps) {
             <span className="nav-label">朋友圈</span>
           </NavLink>
 
-          <NavLink
-            to="/insight-inbox"
-            className={`nav-item ${isActive('/insight-inbox') ? 'active' : ''}`}
-            title={collapsed ? '灵感信箱' : undefined}
-          >
-            <span className="nav-icon"><Sparkles size={20} /></span>
-            <span className="nav-label">灵感信箱</span>
-          </NavLink>
-
           {/* 通讯录 */}
           <NavLink
             to="/contacts"
@@ -381,26 +372,6 @@ function Sidebar({ collapsed }: SidebarProps) {
           >
             <span className="nav-icon"><FolderClosed size={20} /></span>
             <span className="nav-label">资源浏览</span>
-          </NavLink>
-
-          {/* 聊天分析 */}
-          <NavLink
-            to="/analytics"
-            className={`nav-item ${isActive('/analytics') ? 'active' : ''}`}
-            title={collapsed ? '聊天分析' : undefined}
-          >
-            <span className="nav-icon"><BarChart3 size={20} /></span>
-            <span className="nav-label">聊天分析</span>
-          </NavLink>
-
-          {/* 年度报告 */}
-          <NavLink
-            to="/annual-report"
-            className={`nav-item ${isActive('/annual-report') ? 'active' : ''}`}
-            title={collapsed ? '年度报告' : undefined}
-          >
-            <span className="nav-icon"><FileText size={20} /></span>
-            <span className="nav-label">年度报告</span>
           </NavLink>
 
           {/* 我的足迹 */}

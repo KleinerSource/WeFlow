@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation, type Location } from 'react-router-dom'
+import { Routes, Route, useNavigate, useLocation, type Location } from 'react-router-dom'
 import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import RouteGuard from './components/RouteGuard'
@@ -25,8 +25,6 @@ import { resolveAutomationScopeKey } from './pages/Export/hooks/useAutomation'
 const WelcomePage = lazy(() => import('./pages/WelcomePage'))
 const ChatPage = lazy(() => import('./pages/ChatPage'))
 const TelegramPage = lazy(() => import('./pages/TelegramPage'))
-const AnalyticsWelcomePage = lazy(() => import('./pages/AnalyticsWelcomePage'))
-const ChatAnalyticsHubPage = lazy(() => import('./pages/ChatAnalyticsHubPage'))
 const AgreementPage = lazy(() => import('./pages/AgreementPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const MyFootprintPage = lazy(() => import('./pages/MyFootprintPage'))
@@ -40,20 +38,7 @@ const ChatHistoryPage = lazy(() => import('./pages/ChatHistoryPage'))
 const NotificationWindow = lazy(() => import('./pages/NotificationWindow'))
 const AccountManagementPage = lazy(() => import('./pages/AccountManagementPage'))
 const BackupPage = lazy(() => import('./pages/BackupPage'))
-const InsightInboxPage = lazy(() => import('./pages/InsightInboxPage'))
-const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'))
-const GroupAnalyticsPage = lazy(() => import('./pages/GroupAnalyticsPage'))
-const AnnualReportPage = lazy(() => import('./pages/AnnualReportPage'))
-const AnnualReportWindow = lazy(() => import('./pages/AnnualReportWindow'))
-const DualReportPage = lazy(() => import('./pages/DualReportPage'))
-const DualReportWindow = lazy(() => import('./pages/DualReportWindow'))
 const ExportPage = lazy(() => import('./pages/Export/ExportPage'))
-
-function RouteStateRedirect({ to }: { to: string }) {
-  const location = useLocation()
-
-  return <Navigate to={to} replace state={location.state} />
-}
 
 function App() {
   const navigate = useNavigate()
@@ -88,8 +73,6 @@ function App() {
   const isChatHistoryWindow = location.pathname.startsWith('/chat-history/') || location.pathname.startsWith('/chat-history-inline/')
   const isStandaloneChatWindow = location.pathname === '/chat-window'
   const isNotificationWindow = location.pathname === '/notification-window'
-  const isAnnualReportWindow = location.pathname === '/annual-report/view'
-  const isDualReportWindow = location.pathname === '/dual-report/view'
   const isSettingsRoute = location.pathname === '/settings'
   const settingsRouteState = location.state as { backgroundLocation?: Location; initialTab?: unknown } | null
   const routeLocation = isSettingsRoute
@@ -128,7 +111,7 @@ function App() {
 
   const isStandaloneWindow =
     isAgreementWindow || isOnboardingWindow || isVideoPlayerWindow || isChatHistoryWindow ||
-    isStandaloneChatWindow || isNotificationWindow || isAnnualReportWindow || isDualReportWindow ||
+    isStandaloneChatWindow || isNotificationWindow ||
     location.pathname === '/image-viewer-window'
 
   useEffect(() => {
@@ -167,7 +150,7 @@ function App() {
     const body = document.body
     const appRoot = document.getElementById('app')
 
-    if (isOnboardingWindow || isNotificationWindow || isAnnualReportWindow || isDualReportWindow) {
+    if (isOnboardingWindow || isNotificationWindow) {
       root.style.background = 'transparent'
       body.style.background = 'transparent'
       body.style.overflow = 'hidden'
@@ -184,7 +167,7 @@ function App() {
         appRoot.style.overflow = ''
       }
     }
-  }, [isOnboardingWindow, isNotificationWindow, isAnnualReportWindow, isDualReportWindow])
+  }, [isOnboardingWindow, isNotificationWindow])
 
   // 应用主题 (accent color + light/dark mode)
   useEffect(() => {
@@ -205,7 +188,7 @@ function App() {
     }
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
-  }, [currentTheme, themeMode, isOnboardingWindow, isNotificationWindow, isAnnualReportWindow, isDualReportWindow])
+  }, [currentTheme, themeMode, isOnboardingWindow, isNotificationWindow])
 
   // 读取已保存的主题设置
   useEffect(() => {
@@ -590,24 +573,6 @@ function App() {
     )
   }
 
-  // 独立年度报告全屏窗口
-  if (isAnnualReportWindow) {
-    return (
-      <Suspense fallback={null}>
-        <AnnualReportWindow />
-      </Suspense>
-    )
-  }
-
-  // 独立双人报告全屏窗口
-  if (isDualReportWindow) {
-    return (
-      <Suspense fallback={null}>
-        <DualReportWindow />
-      </Suspense>
-    )
-  }
-
   // 主窗口 - 完整布局
   const handleCloseSettings = () => {
     const backgroundLocation = settingsRouteState?.backgroundLocation ?? settingsBackgroundRef.current
@@ -781,21 +746,10 @@ function App() {
                 <Route path="/chat" element={<ChatPage />} />
                 <Route path="/telegram" element={<TelegramPage />} />
 
-                <Route path="/analytics" element={<ChatAnalyticsHubPage />} />
-                <Route path="/analytics/private" element={<AnalyticsWelcomePage />} />
-                <Route path="/analytics/private/view" element={<AnalyticsPage />} />
-                <Route path="/analytics/group" element={<GroupAnalyticsPage />} />
-                <Route path="/analytics/view" element={<RouteStateRedirect to="/analytics/private/view" />} />
-                <Route path="/group-analytics" element={<RouteStateRedirect to="/analytics/group" />} />
-                <Route path="/annual-report" element={<AnnualReportPage />} />
-                <Route path="/annual-report/view" element={<AnnualReportWindow />} />
-                <Route path="/dual-report" element={<DualReportPage />} />
-                <Route path="/dual-report/view" element={<DualReportWindow />} />
                 <Route path="/footprint" element={<MyFootprintPage />} />
 
                 <Route path="/export" element={<div className="export-route-anchor" aria-hidden="true" />} />
                 <Route path="/sns" element={<SnsPage />} />
-                <Route path="/insight-inbox" element={<InsightInboxPage />} />
                 <Route path="/biz" element={<BizPage />} />
                 <Route path="/contacts" element={<ContactsPage />} />
                 <Route path="/resources" element={<ResourcesPage />} />
