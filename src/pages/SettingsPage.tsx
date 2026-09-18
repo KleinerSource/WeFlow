@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useMemo } from 'react'
 import { useAppStore } from '../stores/appStore'
+import { useChannelStore } from '../stores/channelStore'
 import { useChatStore } from '../stores/chatStore'
 import { useThemeStore, themes } from '../stores/themeStore'
 import { useAnalyticsStore } from '../stores/analyticsStore'
@@ -13,7 +14,7 @@ import type { InsightProfileStatus } from '../types/electron'
 import {
   Eye, EyeOff, FolderSearch, FolderOpen, Search, Copy,
   RotateCcw, Trash2, Plug, Check, Sun, Moon, Monitor,
-  Palette, Database, HardDrive, Info, RefreshCw, ChevronDown, Download, Mic,
+  Palette, Database, HardDrive, Info, RefreshCw, ChevronDown, Download, Mic, Layers,
   ShieldCheck, Fingerprint, Lock, KeyRound, Bell, Globe, BarChart2, X, UserRound,
   Sparkles, Loader2, CheckCircle2, XCircle
 } from 'lucide-react'
@@ -22,6 +23,7 @@ import { displayNameOrFallback } from '../utils/displayName'
 import './SettingsPage.scss'
 
 type SettingsTab =
+  | 'channels'
   | 'appearance'
   | 'notification'
   | 'antiRevoke'
@@ -41,6 +43,7 @@ type SettingsTab =
   | 'autoDownload'
 
 const tabs: { id: Exclude<SettingsTab, 'insight' | 'aiFootprint' | 'aiMessageInsight'>; label: string; icon: React.ElementType }[] = [
+  { id: 'channels', label: '渠道管理', icon: Layers },
   { id: 'appearance', label: '外观', icon: Palette },
   { id: 'notification', label: '通知', icon: Bell },
   { id: 'antiRevoke', label: '防撤回', icon: RotateCcw },
@@ -144,6 +147,11 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const setChatSessions = useChatStore((state) => state.setSessions)
   const resetChatStore = useChatStore((state) => state.reset)
   const { currentTheme, themeMode, setTheme, setThemeMode } = useThemeStore()
+  const channelActiveChannel = useChannelStore(state => state.activeChannel)
+  const channelEnabledChannels = useChannelStore(state => state.enabledChannels)
+  const channelAvailability = useChannelStore(state => state.availability)
+  const refreshChannels = useChannelStore(state => state.refresh)
+  const setChannelActive = useChannelStore(state => state.setActiveChannel)
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
@@ -396,6 +404,11 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
       setAiGroupExpanded(true)
     }
   }, [activeTab])
+
+  useEffect(() => {
+    if (activeTab !== 'channels') return
+    void refreshChannels()
+  }, [activeTab, refreshChannels])
 
   useEffect(() => {
     if (!onClose) return
@@ -2350,6 +2363,59 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
       </div>
     )
   }
+
+  const renderChannelsTab = () => (
+    <div className="tab-content">
+      <div className="form-group">
+        <label>数据渠道</label>
+        <span className="form-hint">微信与 Telegram 的连接、导入和功能入口相互独立。</span>
+      </div>
+
+      <div className="channel-settings-list">
+        {([
+          { id: 'wechat', title: '微信', desc: '本机数据库、密钥、聊天与备份' },
+          { id: 'telegram', title: 'Telegram', desc: '账号登录、Desktop JSON 导入与历史同步' }
+        ] as const).map(channel => {
+          const enabled = channelEnabledChannels.includes(channel.id)
+          const availability = channelAvailability[channel.id]
+          return (
+            <div key={channel.id} className="channel-settings-row">
+              <div>
+                <strong>{channel.title}</strong>
+                <span>
+                  {enabled
+                    ? `${availability.configured ? '已配置' : '待配置'} · ${availability.connected ? '已连接' : '未连接'}`
+                    : '未启用'}
+                </span>
+                <small>{channel.desc}</small>
+              </div>
+              <div className="btn-row">
+                {enabled && channelActiveChannel !== channel.id && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => void setChannelActive(channel.id)}>
+                    设为当前
+                  </button>
+                )}
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => void window.electronAPI.window.openOnboardingWindow({
+                    mode: enabled ? 'initial' : 'add-channel',
+                    channel: channel.id
+                  })}
+                >
+                  {enabled ? '重新配置' : '添加'}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="divider" />
+      <div className="form-group">
+        <span className="form-hint">AI 见解中的 Telegram 推送是全局通知功能，与 Telegram 数据渠道配置无关。</span>
+      </div>
+    </div>
+  )
 
   const renderDatabaseTab = () => (
     <div className="tab-content">
@@ -4670,6 +4736,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
           </div>
 
           <div className="settings-body">
+            {activeTab === 'channels' && renderChannelsTab()}
             {activeTab === 'appearance' && renderAppearanceTab()}
             {activeTab === 'notification' && renderNotificationTab()}
             {activeTab === 'antiRevoke' && renderAntiRevokeTab()}

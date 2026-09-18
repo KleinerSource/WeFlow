@@ -39,6 +39,7 @@ import { backupService } from './services/backupService'
 import { imageDownloadService } from './services/imageDownloadService'
 import { telegramService } from './services/telegramService'
 import type { TelegramAuthStep, TelegramSyncRange } from '../shared/telegram'
+import type { ChannelId, CompleteOnboardingPayload, OnboardingSetupMode } from '../shared/channel'
 
 // 屏幕采集去节流（仅影响通知玻璃的 Chromium 流回退管线；Windows 主路径为
 // 原生面板渲染，不经过 Chromium 采集）：默认桌面采集 CPU 预算限制在 50%，
@@ -1225,10 +1226,12 @@ function closeSplash() {
 /**
  * 创建首次引导窗口
  */
-function createOnboardingWindow(mode: 'default' | 'add-account' = 'default') {
-  const onboardingHash = mode === 'add-account'
-    ? '/onboarding-window?mode=add-account'
-    : '/onboarding-window'
+function createOnboardingWindow(mode: OnboardingSetupMode = 'initial', channel?: ChannelId) {
+  const params = new URLSearchParams()
+  if (mode !== 'initial') params.set('mode', mode)
+  if (channel) params.set('channel', channel)
+  const query = params.toString()
+  const onboardingHash = `/onboarding-window${query ? `?${query}` : ''}`
 
   if (onboardingWindow && !onboardingWindow.isDestroyed()) {
     if (process.env.VITE_DEV_SERVER_URL) {
@@ -3996,16 +3999,29 @@ function registerIpcHandlers() {
   })
 
   // 完成引导，关闭引导窗口并显示主窗口
-  ipcMain.handle('window:completeOnboarding', async (_, destination?: 'telegram') => {
-    if (destination === 'telegram' && mainWindow && !mainWindow.isDestroyed()) {
-      if (process.env.VITE_DEV_SERVER_URL) {
-        await mainWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}#/telegram`)
-      } else {
-        await mainWindow.loadFile(join(__dirname, '../dist/index.html'), { hash: '/telegram' })
-      }
-    }
+  ipcMain.handle('window:completeOnboarding', async (_, payload?: CompleteOnboardingPayload) => {
     try {
+      const channel = payload?.channel
+      if (channel !== 'wechat' && channel !== 'telegram') throw new Error('无效的引导渠道')
+
+      const enabledChannels = Array.isArray(configService?.get('enabledChannels'))
+        ? (configService!.get('enabledChannels') as Array<'wechat' | 'telegram'>)
+        : []
+      const nextEnabledChannels = Array.from(new Set([...enabledChannels, channel]))
+      configService?.set('activeChannel', channel)
+      configService?.set('enabledChannels', nextEnabledChannels)
       configService?.set('onboardingDone', true)
+
+      const destination = payload?.destination === 'home'
+        ? '/home'
+        : (channel === 'telegram' ? '/telegram' : '/chat')
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (process.env.VITE_DEV_SERVER_URL) {
+          await mainWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}#${destination}`)
+        } else {
+          await mainWindow.loadFile(join(__dirname, '../dist/index.html'), { hash: destination })
+        }
+      }
     } catch (e) {
       console.error('保存引导完成状态失败:', e)
     }
@@ -4018,13 +4034,15 @@ function registerIpcHandlers() {
   })
 
   // 重新打开首次引导窗口，并隐藏主窗口
-  ipcMain.handle('window:openOnboardingWindow', async (_, options?: { mode?: 'add-account' }) => {
+  ipcMain.handle('window:openOnboardingWindow', async (_, options?: { mode?: OnboardingSetupMode | 'add-account'; channel?: ChannelId }) => {
     shouldShowMain = false
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.hide()
     }
-    const mode = options?.mode === 'add-account' ? 'add-account' : 'default'
-    createOnboardingWindow(mode)
+    const mode: OnboardingSetupMode = options?.mode === 'add-account'
+      ? 'add-wechat-account'
+      : (options?.mode ?? 'initial')
+    createOnboardingWindow(mode, options?.channel)
     return true
   })
 
@@ -4127,6 +4145,13 @@ app.whenReady().then(async () => {
   applyAutoUpdateChannel('startup')
   syncLaunchAtStartupPreference()
   const onboardingDone = configService.get('onboardingDone') === true
+  const enabledChannels = Array.isArray(configService.get('enabledChannels'))
+    ? (configService.get('enabledChannels') as Array<'wechat' | 'telegram'>)
+    : []
+  const wechatStartupConfigured = enabledChannels.includes('wechat')
+    && Boolean(configService.get('dbPath'))
+    && Boolean(configService.get('decryptKey'))
+    && Boolean(configService.get('myWxid'))
   const startInBackground = onboardingDone && isSilentStartupEnabled()
   shouldShowMain = onboardingDone
 
@@ -4238,7 +4263,7 @@ app.whenReady().then(async () => {
   }
 
   // 已完成引导时，与渲染进程加载并行预热会话列表和联系人名字/头像缓存
-  if (onboardingDone) {
+  if (onboardingDone && wechatStartupConfigured) {
     updateSplashProgress(35, '正在连接数据库...')
     const connectWarmup = await withTimeout(() => chatService.connect(), 12000)
     const connected = !connectWarmup.timedOut && connectWarmup.value?.success === true

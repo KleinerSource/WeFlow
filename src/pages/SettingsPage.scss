@@ -975,6 +975,61 @@
   border-radius: 4px;
 }
 
+.channel-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.channel-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+
+  > div:first-child {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    strong {
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+
+    span {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    small {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 640px) {
+    align-items: stretch;
+    flex-direction: column;
+
+    .btn-row {
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+  }
+}
+
 .image-key-actions {
   display: flex;
   align-items: center;

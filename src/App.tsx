@@ -6,6 +6,7 @@ import RouteGuard from './components/RouteGuard'
 import HomePage from './pages/HomePage'
 
 import { useAppStore } from './stores/appStore'
+import { useChannelStore } from './stores/channelStore'
 import { themes, useThemeStore, type ThemeId, type ThemeMode } from './stores/themeStore'
 import * as configService from './services/config'
 import * as cloudControl from './services/cloudControl'
@@ -18,11 +19,12 @@ import LockScreen from './components/LockScreen'
 import { GlobalSessionMonitor } from './components/GlobalSessionMonitor'
 import WindowCloseDialog from './components/WindowCloseDialog'
 import { resolveAutomationScopeKey } from './pages/Export/hooks/useAutomation'
+import { channelHomeRoute } from './channelRoutes'
 
 // 全部页面懒加载：主窗口首屏只解析 App 壳 + HomePage；
 // 常驻的通知窗口等独立窗口路由也因此只加载各自的小 chunk，
 // 显著降低每个渲染进程的 JS 堆占用与启动时间
-const WelcomePage = lazy(() => import('./pages/WelcomePage'))
+const SetupPage = lazy(() => import('./pages/Setup/SetupPage'))
 const ChatPage = lazy(() => import('./pages/ChatPage'))
 const TelegramPage = lazy(() => import('./pages/TelegramPage'))
 const AgreementPage = lazy(() => import('./pages/AgreementPage'))
@@ -66,6 +68,14 @@ function App() {
     setLocked
   } = useAppStore()
 
+  const {
+    activeChannel,
+    availability,
+    isLoaded: areChannelsLoaded,
+    initialize: initializeChannels,
+    refresh: refreshChannels
+  } = useChannelStore()
+
   const { currentTheme, themeMode, setTheme, setThemeMode } = useThemeStore()
   const isAgreementWindow = location.pathname === '/agreement-window'
   const isOnboardingWindow = location.pathname === '/onboarding-window'
@@ -82,6 +92,7 @@ function App() {
   // Export 模块按需挂载：首次进入导出页，或存在启用的自动化任务（调度器在导出页内）时才挂载
   const [exportMounted, setExportMounted] = useState(false)
   const [themeHydrated, setThemeHydrated] = useState(false)
+  const hasAppliedDefaultChannel = useRef(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [canMinimizeToTray, setCanMinimizeToTray] = useState(false)
@@ -109,10 +120,23 @@ function App() {
     }
   }, [location])
 
+  useEffect(() => {
+    if (!areChannelsLoaded || hasAppliedDefaultChannel.current) return
+    if (location.pathname !== '/' && location.pathname !== '/home') return
+    if (!activeChannel || !availability[activeChannel].configured) return
+    hasAppliedDefaultChannel.current = true
+    navigate(channelHomeRoute(activeChannel))
+  }, [activeChannel, areChannelsLoaded, availability, location.pathname, navigate])
+
   const isStandaloneWindow =
     isAgreementWindow || isOnboardingWindow || isVideoPlayerWindow || isChatHistoryWindow ||
     isStandaloneChatWindow || isNotificationWindow ||
     location.pathname === '/image-viewer-window'
+
+  useEffect(() => {
+    if (isStandaloneWindow) return
+    void initializeChannels()
+  }, [initializeChannels, isStandaloneWindow])
 
   useEffect(() => {
     if (isExportRoute && !exportMounted) setExportMounted(true)
@@ -416,6 +440,8 @@ function App() {
 
     const autoConnect = async () => {
       try {
+        await initializeChannels()
+        const enabledChannels = await configService.getEnabledChannels()
         const dbPath = await configService.getDbPath()
         const decryptKey = await configService.getDecryptKey()
         const wxid = await configService.getMyWxid()
@@ -428,7 +454,7 @@ function App() {
         }
 
         // 如果配置完整，自动测试连接
-        if (dbPath && effectiveDecryptKey && wxid) {
+        if (enabledChannels.includes('wechat') && dbPath && effectiveDecryptKey && wxid) {
           if (!onboardingDone) {
             await configService.setOnboardingDone(true)
           }
@@ -438,6 +464,7 @@ function App() {
           if (result.success) {
 
             setDbConnected(true, dbPath)
+            await refreshChannels()
             // 如果当前在欢迎页，跳转到首页
             if (window.location.hash === '#/' || window.location.hash === '') {
               navigate('/home')
@@ -464,7 +491,7 @@ function App() {
     }
 
     autoConnect()
-  }, [isAgreementWindow, isOnboardingWindow, navigate, setDbConnected])
+  }, [isAgreementWindow, isOnboardingWindow, initializeChannels, navigate, refreshChannels, setDbConnected])
 
   // 检查应用锁
   useEffect(() => {
@@ -509,7 +536,7 @@ function App() {
   if (isOnboardingWindow) {
     return (
       <Suspense fallback={null}>
-        <WelcomePage standalone />
+        <SetupPage standalone />
       </Suspense>
     )
   }

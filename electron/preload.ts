@@ -4,6 +4,7 @@ type CloseConfirmPayload = {
   canMinimizeToTray: boolean
   restoreMethod?: 'tray' | 'dock'
 }
+import type { CompleteOnboardingPayload, OpenOnboardingOptions } from '../shared/channel'
 
 // 暴露给渲染进程的 API
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -134,8 +135,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     respondCloseConfirm: (action: 'tray' | 'quit' | 'cancel') =>
       ipcRenderer.invoke('window:respondCloseConfirm', action),
     openAgreementWindow: () => ipcRenderer.invoke('window:openAgreementWindow'),
-    completeOnboarding: (destination?: 'telegram') => ipcRenderer.invoke('window:completeOnboarding', destination),
-    openOnboardingWindow: (options?: { mode?: 'add-account' }) => ipcRenderer.invoke('window:openOnboardingWindow', options),
+    completeOnboarding: (payload: CompleteOnboardingPayload) => ipcRenderer.invoke('window:completeOnboarding', payload),
+    openOnboardingWindow: (options?: OpenOnboardingOptions) => ipcRenderer.invoke('window:openOnboardingWindow', options),
     setTitleBarOverlay: (options: { symbolColor: string }) => ipcRenderer.send('window:setTitleBarOverlay', options),
     openVideoPlayerWindow: (videoPath: string, videoWidth?: number, videoHeight?: number) =>
       ipcRenderer.invoke('window:openVideoPlayerWindow', videoPath, videoWidth, videoHeight),

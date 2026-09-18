@@ -1,6 +1,7 @@
 import type { ChatSession, Message, Contact, ContactInfo, ChatRecordItem } from './models'
 
 import type { TelegramAuthStep, TelegramMessage, TelegramProgress, TelegramSource, TelegramStatus, TelegramSyncRange } from '../../shared/telegram'
+import type { CompleteOnboardingPayload, OpenOnboardingOptions } from '../../shared/channel'
 
 export interface SessionChatWindowOpenOptions {
   source?: 'chat' | 'export'
@@ -347,8 +348,8 @@ export interface ElectronAPI {
     onCloseConfirmRequested: (callback: (payload: CloseConfirmPayload) => void) => () => void
     respondCloseConfirm: (action: 'tray' | 'quit' | 'cancel') => Promise<boolean>
     openAgreementWindow: () => Promise<boolean>
-    completeOnboarding: (destination?: 'telegram') => Promise<boolean>
-    openOnboardingWindow: (options?: { mode?: 'add-account' }) => Promise<boolean>
+    completeOnboarding: (payload: CompleteOnboardingPayload) => Promise<boolean>
+    openOnboardingWindow: (options?: OpenOnboardingOptions) => Promise<boolean>
     setTitleBarOverlay: (options: { symbolColor: string }) => void
     openVideoPlayerWindow: (videoPath: string, videoWidth?: number, videoHeight?: number) => Promise<void>
     resizeToFitVideo: (videoWidth: number, videoHeight: number) => Promise<void>

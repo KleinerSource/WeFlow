@@ -1,26 +1,27 @@
 import { useEffect } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { useAppStore } from '../stores/appStore'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { routeChannel } from '../channelRoutes'
+import { useChannelStore } from '../stores/channelStore'
 
 interface RouteGuardProps {
   children: React.ReactNode
 }
 
-const PUBLIC_ROUTES = ['/', '/home', '/settings', '/account-management', '/telegram']
-
 function RouteGuard({ children }: RouteGuardProps) {
   const navigate = useNavigate()
   const location = useLocation()
-  const isDbConnected = useAppStore(state => state.isDbConnected)
+  const isLoaded = useChannelStore(state => state.isLoaded)
+  const enabledChannels = useChannelStore(state => state.enabledChannels)
+  const availability = useChannelStore(state => state.availability)
 
   useEffect(() => {
-    const isPublicRoute = PUBLIC_ROUTES.includes(location.pathname)
-
-    // 未连接数据库且不在公开页面，跳转到欢迎页
-    if (!isDbConnected && !isPublicRoute) {
-      navigate('/', { replace: true })
+    if (!isLoaded) return
+    const channel = routeChannel(location.pathname)
+    if (!channel || enabledChannels.includes(channel)) {
+      if (channel !== 'wechat' || availability.wechat.configured) return
     }
-  }, [isDbConnected, location.pathname, navigate])
+    navigate('/home', { replace: true })
+  }, [availability.wechat.configured, enabledChannels, isLoaded, location.pathname, navigate])
 
   return <>{children}</>
 }

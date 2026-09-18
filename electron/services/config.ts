@@ -36,6 +36,8 @@ interface ConfigSchema {
   decryptKey: string
   myWxid: string
   onboardingDone: boolean
+  activeChannel: 'wechat' | 'telegram' | null
+  enabledChannels: Array<'wechat' | 'telegram'>
   imageXorKey: number
   imageAesKey: string
   wxidConfigs: Record<string, { decryptKey?: string; imageXorKey?: number; imageAesKey?: string; updatedAt?: number }>
@@ -200,6 +202,8 @@ export class ConfigService {
       decryptKey: '',
       myWxid: '',
       onboardingDone: false,
+      activeChannel: null,
+      enabledChannels: [],
       imageXorKey: 0,
       imageAesKey: '',
       wxidConfigs: {},

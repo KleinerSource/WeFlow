@@ -21,6 +21,8 @@ export const CONFIG_KEYS = {
   AGREEMENT_ACCEPTED: 'agreementAccepted',
   LOG_ENABLED: 'logEnabled',
   ONBOARDING_DONE: 'onboardingDone',
+  ACTIVE_CHANNEL: 'activeChannel',
+  ENABLED_CHANNELS: 'enabledChannels',
   LLM_MODEL_PATH: 'llmModelPath',
   IMAGE_XOR_KEY: 'imageXorKey',
   IMAGE_AES_KEY: 'imageAesKey',
@@ -464,6 +466,26 @@ export async function getOnboardingDone(): Promise<boolean> {
 // 设置首次配置引导完成
 export async function setOnboardingDone(done: boolean): Promise<void> {
   await config.set(CONFIG_KEYS.ONBOARDING_DONE, done)
+}
+
+export async function getActiveChannel(): Promise<'wechat' | 'telegram' | null> {
+  const value = await config.get(CONFIG_KEYS.ACTIVE_CHANNEL)
+  return value === 'wechat' || value === 'telegram' ? value : null
+}
+
+export async function setActiveChannel(channel: 'wechat' | 'telegram' | null): Promise<void> {
+  await config.set(CONFIG_KEYS.ACTIVE_CHANNEL, channel)
+}
+
+export async function getEnabledChannels(): Promise<Array<'wechat' | 'telegram'>> {
+  const value = await config.get(CONFIG_KEYS.ENABLED_CHANNELS)
+  return Array.isArray(value)
+    ? value.filter((item): item is 'wechat' | 'telegram' => item === 'wechat' || item === 'telegram')
+    : []
+}
+
+export async function setEnabledChannels(channels: Array<'wechat' | 'telegram'>): Promise<void> {
+  await config.set(CONFIG_KEYS.ENABLED_CHANNELS, Array.from(new Set(channels)))
 }
 
 // 获取自动语音转文字开关

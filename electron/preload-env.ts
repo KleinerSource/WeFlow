@@ -1,4 +1,15 @@
-import { join, dirname } from 'path'
+import { app } from 'electron'
+import { join, dirname, resolve } from 'path'
+
+/**
+ * 在任何服务单例和 Electron 状态目录初始化前应用测试隔离目录。
+ */
+function applyUserDataOverride() {
+    const overridePath = String(process.env.WEFLOW_USER_DATA_PATH || process.env.WEFLOW_CONFIG_CWD || '').trim()
+    if (overridePath) {
+        app.setPath('userData', resolve(overridePath))
+    }
+}
 
 /**
  * 强制将本地资源目录添加到 PATH 最前端，确保优先加载本地 DLL
@@ -33,6 +44,7 @@ function enforceLocalDllPriority() {
 }
 
 try {
+    applyUserDataOverride()
     enforceLocalDllPriority()
 } catch (e) {
     console.error('[WeFlow] Failed to enforce local service priority:', e)
