@@ -7,7 +7,6 @@ import './HomePage.scss'
 
 function HomePage() {
   const navigate = useNavigate()
-  const activeChannel = useChannelStore(state => state.activeChannel)
   const enabledChannels = useChannelStore(state => state.enabledChannels)
   const availability = useChannelStore(state => state.availability)
   const initialize = useChannelStore(state => state.initialize)
@@ -25,7 +24,7 @@ function HomePage() {
       navigate(channel === 'telegram' ? '/telegram' : '/chat')
       return
     }
-    openSetup('initial', channel)
+    openSetup('add-channel', channel)
   }
 
   const channels: Array<{ id: ChannelId; title: string; icon: typeof MessageCircle; enabled: boolean }> = [
@@ -61,9 +60,7 @@ function HomePage() {
               <span className="home-channel-copy">
                 <strong>{channel.title}</strong>
                 <small>
-                  {availability[channel.id].configured
-                    ? (activeChannel === channel.id ? '当前渠道 · 已配置' : '已配置')
-                    : '待配置'}
+                  {availability[channel.id].configured ? '已配置' : '待配置'}
                 </small>
               </span>
               <ArrowRight size={16} />

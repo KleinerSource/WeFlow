@@ -61,6 +61,40 @@ test('缓存按会话隔离、去重，并拒绝越界媒体路径', async () =>
   }
 })
 
+test('通讯录与资源预览按真实消息聚合', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'weflow-telegram-views-test-'))
+  try {
+    const store = new TelegramStore(root)
+    const chat = { id: 'group:1', title: '项目群', kind: 'group', lastMessageAt: 120, unreadCount: 0, messageCount: 0, complete: true }
+    const messages = [
+      { id: 1, date: 100, sender: '甲', text: '文本', kind: 'text', outgoing: false },
+      { id: 2, date: 110, sender: '我', text: '图片', kind: 'photo', outgoing: true, mediaPath: 'inside.png' },
+      { id: 3, date: 120, sender: '乙', text: '语音', kind: 'voice_message', outgoing: false }
+    ]
+    const sourceId = await store.importExport('记录', root, [{ chat, messages }])
+    assert.deepEqual((await store.listContacts(sourceId)).map(contact => ({
+      name: contact.name,
+      messageCount: contact.messageCount,
+      chatCount: contact.chatCount,
+      outgoing: contact.outgoing
+    })), [
+      { name: '乙', messageCount: 1, chatCount: 1, outgoing: false },
+      { name: '我', messageCount: 1, chatCount: 1, outgoing: true },
+      { name: '甲', messageCount: 1, chatCount: 1, outgoing: false }
+    ])
+    assert.deepEqual((await store.listResources(sourceId)).map(resource => ({
+      chatTitle: resource.chatTitle,
+      kind: resource.kind,
+      mediaPath: resource.mediaPath
+    })), [
+      { chatTitle: '项目群', kind: 'voice_message', mediaPath: undefined },
+      { chatTitle: '项目群', kind: 'photo', mediaPath: join(root, 'inside.png') }
+    ])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('tdata 授权只可复用匹配的在线缓存，不覆盖无法确认的账号', async () => {
   const root = await mkdtemp(join(tmpdir(), 'weflow-tdata-isolation-'))
   try {

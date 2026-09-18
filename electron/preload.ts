@@ -137,6 +137,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openAgreementWindow: () => ipcRenderer.invoke('window:openAgreementWindow'),
     completeOnboarding: (payload: CompleteOnboardingPayload) => ipcRenderer.invoke('window:completeOnboarding', payload),
     openOnboardingWindow: (options?: OpenOnboardingOptions) => ipcRenderer.invoke('window:openOnboardingWindow', options),
+    onChannelsChanged: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('channels:changed', listener)
+      return () => ipcRenderer.removeListener('channels:changed', listener)
+    },
     setTitleBarOverlay: (options: { symbolColor: string }) => ipcRenderer.send('window:setTitleBarOverlay', options),
     openVideoPlayerWindow: (videoPath: string, videoWidth?: number, videoHeight?: number) =>
       ipcRenderer.invoke('window:openVideoPlayerWindow', videoPath, videoWidth, videoHeight),
@@ -653,6 +658,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     logout: () => ipcRenderer.invoke('telegram:logout'),
     refresh: () => ipcRenderer.invoke('telegram:refresh'),
     messages: (sourceId: string, chatId: string) => ipcRenderer.invoke('telegram:messages', sourceId, chatId),
+    contacts: (sourceId: string) => ipcRenderer.invoke('telegram:contacts', sourceId),
+    resources: (sourceId: string) => ipcRenderer.invoke('telegram:resources', sourceId),
     loadMessages: (chatId: string, older: boolean) => ipcRenderer.invoke('telegram:loadMessages', chatId, older),
     downloadMedia: (chatId: string, messageId: number) => ipcRenderer.invoke('telegram:downloadMedia', chatId, messageId),
     syncAll: (range?: { from?: string; to?: string }) => ipcRenderer.invoke('telegram:syncAll', range),

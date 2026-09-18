@@ -10,8 +10,6 @@ interface ChannelState {
   isLoaded: boolean
   initialize: () => Promise<void>
   refresh: () => Promise<void>
-  enableChannel: (channel: ChannelId, options?: { setActive?: boolean }) => Promise<void>
-  setActiveChannel: (channel: ChannelId) => Promise<void>
 }
 
 const normalizeChannels = (value: unknown): ChannelId[] => {
@@ -69,22 +67,23 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
       readTelegramConfig()
     ])
 
-    let enabled = normalizeChannels(savedEnabled)
-    if (enabled.length === 0 && (wechatConfigured || telegram.configured)) {
-      enabled = [
-        ...(wechatConfigured ? (['wechat'] as ChannelId[]) : []),
-        ...(telegram.configured ? (['telegram'] as ChannelId[]) : [])
-      ]
-      await configService.setEnabledChannels(enabled)
-    }
-
     const configuredChannels = new Set<ChannelId>([
       ...(wechatConfigured ? (['wechat'] as ChannelId[]) : []),
       ...(telegram.configured ? (['telegram'] as ChannelId[]) : [])
     ])
-    const active = savedActive && enabled.includes(savedActive)
+    const enabled = normalizeChannels(savedEnabled)
+    const nextEnabled = Array.from(new Set([
+      ...enabled,
+      ...(wechatConfigured ? (['wechat'] as ChannelId[]) : []),
+      ...(telegram.configured ? (['telegram'] as ChannelId[]) : [])
+    ]))
+    if (nextEnabled.length !== enabled.length) {
+      await configService.setEnabledChannels(nextEnabled)
+    }
+
+    const active = savedActive && nextEnabled.includes(savedActive)
       ? savedActive
-      : enabled.find(channel => configuredChannels.has(channel)) || enabled[0] || null
+      : nextEnabled.find(channel => configuredChannels.has(channel)) || nextEnabled[0] || null
     if (active !== savedActive) {
       await configService.setActiveChannel(active)
     }
@@ -94,23 +93,10 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
       activeChannel: active,
       enabledChannels: enabled,
       availability: {
-        wechat: { enabled: enabled.includes('wechat'), configured: wechatConfigured, connected: wechatConfigured && isWeChatConnected },
-        telegram: { enabled: enabled.includes('telegram'), configured: telegram.configured, connected: telegram.connected }
+        wechat: { enabled: nextEnabled.includes('wechat'), configured: wechatConfigured, connected: wechatConfigured && isWeChatConnected },
+        telegram: { enabled: nextEnabled.includes('telegram'), configured: telegram.configured, connected: telegram.connected }
       }
     })
   },
 
-  enableChannel: async (channel, options) => {
-    const enabled = Array.from(new Set([...get().enabledChannels, channel]))
-    const active = options?.setActive === false ? get().activeChannel : channel
-    await configService.setEnabledChannels(enabled)
-    await configService.setActiveChannel(active)
-    await get().refresh()
-  },
-
-  setActiveChannel: async (channel) => {
-    if (!get().enabledChannels.includes(channel)) return
-    await configService.setActiveChannel(channel)
-    await get().refresh()
-  }
 }))

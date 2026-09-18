@@ -35,7 +35,7 @@ function SetupPage({ standalone = false }: SetupPageProps) {
     void (async () => {
       const enabled: ChannelId[] = Array.from(new Set([...await configService.getEnabledChannels(), initialChannel]))
       await configService.setEnabledChannels(enabled)
-      if (setupMode !== 'add-channel') {
+      if (setupMode === 'initial') {
         await configService.setActiveChannel(initialChannel)
       }
       await configService.setOnboardingDone(true)
@@ -46,7 +46,9 @@ function SetupPage({ standalone = false }: SetupPageProps) {
     setBusy(true)
     try {
       const enabled: ChannelId[] = Array.from(new Set([...await configService.getEnabledChannels(), channel]))
-      await configService.setActiveChannel(channel)
+      if (setupMode === 'initial') {
+        await configService.setActiveChannel(channel)
+      }
       await configService.setEnabledChannels(enabled)
       await configService.setOnboardingDone(true)
       setSelectedChannel(channel)
@@ -61,7 +63,7 @@ function SetupPage({ standalone = false }: SetupPageProps) {
       window.setTimeout(() => {
         void window.electronAPI.window.completeOnboarding({
           channel,
-          setupMode: setupMode === 'add-channel' ? 'add-channel' : 'initial',
+          setupMode: setupMode === 'initial' ? 'initial' : 'add-channel',
           destination
         })
       }, 450)

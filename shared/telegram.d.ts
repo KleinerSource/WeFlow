@@ -25,6 +25,32 @@ export interface TelegramSource {
   chats: TelegramChat[]
 }
 
+export interface TelegramContactChat {
+  id: string
+  title: string
+}
+
+export interface TelegramContact {
+  id: string
+  name: string
+  messageCount: number
+  lastActiveAt: number
+  chatCount: number
+  chats: TelegramContactChat[]
+  outgoing: boolean
+}
+
+export interface TelegramResource {
+  id: string
+  messageId: number
+  chatId: string
+  chatTitle: string
+  kind: string
+  date: number
+  sender: string
+  mediaPath?: string
+}
+
 export interface TelegramStatus {
   connected: boolean
   accountName: string

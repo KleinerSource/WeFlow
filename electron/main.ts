@@ -1917,6 +1917,8 @@ function registerIpcHandlers() {
   ipcMain.handle('telegram:logout', () => telegramService.logout())
   ipcMain.handle('telegram:refresh', () => telegramService.refreshDialogs())
   ipcMain.handle('telegram:messages', (_, sourceId: string, chatId: string) => telegramService.getStore().getMessages(sourceId, chatId))
+  ipcMain.handle('telegram:contacts', (_, sourceId: string) => telegramService.getStore().listContacts(sourceId))
+  ipcMain.handle('telegram:resources', (_, sourceId: string) => telegramService.getStore().listResources(sourceId))
   ipcMain.handle('telegram:loadMessages', (_, chatId: string, older: boolean) => telegramService.loadMessages(chatId, older))
   ipcMain.handle('telegram:downloadMedia', (_, chatId: string, messageId: number) => telegramService.downloadMedia(chatId, messageId))
   ipcMain.handle('telegram:syncAll', (_, range?: TelegramSyncRange) => telegramService.syncAll(range))
@@ -4008,9 +4010,15 @@ function registerIpcHandlers() {
         ? (configService!.get('enabledChannels') as Array<'wechat' | 'telegram'>)
         : []
       const nextEnabledChannels = Array.from(new Set([...enabledChannels, channel]))
-      configService?.set('activeChannel', channel)
+      if (payload?.setupMode !== 'add-channel') {
+        configService?.set('activeChannel', channel)
+      }
       configService?.set('enabledChannels', nextEnabledChannels)
       configService?.set('onboardingDone', true)
+      mainWindow?.webContents.send('channels:changed', {
+        activeChannel: configService.get('activeChannel'),
+        enabledChannels: nextEnabledChannels
+      })
 
       const destination = payload?.destination === 'home'
         ? '/home'

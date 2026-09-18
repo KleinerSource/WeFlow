@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'crypto'
 import { mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'path'
-import type { TelegramChat, TelegramMessage, TelegramSource } from '../../shared/telegram'
+import type { TelegramChat, TelegramContact, TelegramMessage, TelegramResource, TelegramSource } from '../../shared/telegram'
 
 export class TelegramStore {
   private queue: Promise<unknown> = Promise.resolve()
@@ -52,12 +52,70 @@ export class TelegramStore {
   async getMessages(sourceId: string, chatId: string): Promise<TelegramMessage[]> {
     const source = await this.getSource(sourceId)
     if (!source?.chats.some(chat => chat.id === chatId)) throw new Error('会话不存在')
+    return this.readMessages(sourceId, chatId)
+  }
+
+  private async readMessages(sourceId: string, chatId: string): Promise<TelegramMessage[]> {
     try {
       return JSON.parse(await readFile(this.messageFile(sourceId, chatId), 'utf8')) as TelegramMessage[]
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
       throw error
     }
+  }
+
+  async listContacts(sourceId: string): Promise<TelegramContact[]> {
+    const source = await this.getSource(sourceId)
+    if (!source) throw new Error('数据源不存在')
+    const contacts = new Map<string, TelegramContact>()
+    for (const chat of source.chats) {
+      const messages = await this.readMessages(sourceId, chat.id)
+      for (const message of messages) {
+        const name = message.sender || (message.outgoing ? source.label : chat.title)
+        if (!name) continue
+        const contact = contacts.get(name) || {
+          id: name,
+          name,
+          messageCount: 0,
+          lastActiveAt: 0,
+          chatCount: 0,
+          chats: [],
+          outgoing: false
+        }
+        contact.messageCount += 1
+        contact.lastActiveAt = Math.max(contact.lastActiveAt, message.date)
+        contact.outgoing = contact.outgoing || message.outgoing
+        if (!contact.chats.some(item => item.id === chat.id)) {
+          contact.chats.push({ id: chat.id, title: chat.title })
+          contact.chatCount += 1
+        }
+        contacts.set(name, contact)
+      }
+    }
+    return [...contacts.values()].sort((a, b) => b.lastActiveAt - a.lastActiveAt || a.name.localeCompare(b.name))
+  }
+
+  async listResources(sourceId: string): Promise<TelegramResource[]> {
+    const source = await this.getSource(sourceId)
+    if (!source) throw new Error('数据源不存在')
+    const resources: TelegramResource[] = []
+    for (const chat of source.chats) {
+      const messages = await this.readMessages(sourceId, chat.id)
+      for (const message of messages) {
+        if (message.kind === 'text' || message.kind === 'service') continue
+        resources.push({
+          id: `${sourceId}:${chat.id}:${message.id}`,
+          messageId: message.id,
+          chatId: chat.id,
+          chatTitle: chat.title,
+          kind: message.kind,
+          date: message.date,
+          sender: message.sender || (message.outgoing ? source.label : chat.title),
+          mediaPath: message.mediaPath
+        })
+      }
+    }
+    return resources.sort((a, b) => b.date - a.date || b.messageId - a.messageId)
   }
 
   async updateLive(label: string, chats: TelegramChat[]): Promise<void> {

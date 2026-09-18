@@ -139,6 +139,13 @@ function App() {
   }, [initializeChannels, isStandaloneWindow])
 
   useEffect(() => {
+    if (isStandaloneWindow) return
+    return window.electronAPI.window.onChannelsChanged(() => {
+      void refreshChannels()
+    })
+  }, [isStandaloneWindow, refreshChannels])
+
+  useEffect(() => {
     if (isExportRoute && !exportMounted) setExportMounted(true)
   }, [isExportRoute, exportMounted])
 

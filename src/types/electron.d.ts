@@ -1,6 +1,6 @@
 import type { ChatSession, Message, Contact, ContactInfo, ChatRecordItem } from './models'
 
-import type { TelegramAuthStep, TelegramMessage, TelegramProgress, TelegramSource, TelegramStatus, TelegramSyncRange } from '../../shared/telegram'
+import type { TelegramAuthStep, TelegramContact, TelegramMessage, TelegramProgress, TelegramResource, TelegramSource, TelegramStatus, TelegramSyncRange } from '../../shared/telegram'
 import type { CompleteOnboardingPayload, OpenOnboardingOptions } from '../../shared/channel'
 
 export interface SessionChatWindowOpenOptions {
@@ -327,6 +327,8 @@ export interface ElectronAPI {
     logout: () => Promise<void>
     refresh: () => Promise<void>
     messages: (sourceId: string, chatId: string) => Promise<TelegramMessage[]>
+    contacts: (sourceId: string) => Promise<TelegramContact[]>
+    resources: (sourceId: string) => Promise<TelegramResource[]>
     loadMessages: (chatId: string, older: boolean) => Promise<TelegramMessage[]>
     downloadMedia: (chatId: string, messageId: number) => Promise<string>
     syncAll: (range?: TelegramSyncRange) => Promise<void>
@@ -350,6 +352,7 @@ export interface ElectronAPI {
     openAgreementWindow: () => Promise<boolean>
     completeOnboarding: (payload: CompleteOnboardingPayload) => Promise<boolean>
     openOnboardingWindow: (options?: OpenOnboardingOptions) => Promise<boolean>
+    onChannelsChanged: (callback: () => void) => () => void
     setTitleBarOverlay: (options: { symbolColor: string }) => void
     openVideoPlayerWindow: (videoPath: string, videoWidth?: number, videoHeight?: number) => Promise<void>
     resizeToFitVideo: (videoWidth: number, videoHeight: number) => Promise<void>

@@ -45,12 +45,12 @@ function Sidebar({ collapsed }: SidebarProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const setLocked = useAppStore(state => state.setLocked)
-  const activeChannel = useChannelStore(state => state.activeChannel)
   const enabledChannels = useChannelStore(state => state.enabledChannels)
   const availability = useChannelStore(state => state.availability)
   const wechatEnabled = enabledChannels.includes('wechat')
   const wechatConfigured = wechatEnabled && availability.wechat.configured
   const telegramEnabled = enabledChannels.includes('telegram')
+  const telegramConfigured = telegramEnabled && availability.telegram.configured
 
   const [authEnabled, setAuthEnabled] = useState(false)
   const [activeExportTaskCount, setActiveExportTaskCount] = useState(0)
@@ -131,14 +131,11 @@ function Sidebar({ collapsed }: SidebarProps) {
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(`${path}/`)
   const exportTaskBadge = activeExportTaskCount > 99 ? '99+' : `${activeExportTaskCount}`
   const lockActionLabel = authEnabled ? '锁定应用' : '开启应用锁'
-  const isTelegramActive = activeChannel === 'telegram'
-  const channelUserName = isTelegramActive ? 'Telegram' : activeChannel === 'wechat' ? '微信' : '未选择渠道'
-  const channelUserSubtitle = activeChannel
-    ? (availability[activeChannel].configured ? (isTelegramActive ? 'Telegram 渠道' : '微信渠道') : '待配置')
-    : '请先选择渠道'
+  const primaryChannelName = wechatConfigured ? '微信' : telegramConfigured ? 'Telegram' : '未配置渠道'
+  const channelUserSubtitle = enabledChannels.length > 0 ? `已启用 ${enabledChannels.length} 个渠道` : '请先选择渠道'
 
   const openChannelSetup = () => {
-    void window.electronAPI.window.openOnboardingWindow({ mode: 'initial', channel: 'wechat' })
+    void window.electronAPI.window.openOnboardingWindow({ mode: 'add-channel', channel: 'wechat' })
   }
 
   const openSettings = () => {
@@ -267,16 +264,16 @@ function Sidebar({ collapsed }: SidebarProps) {
             }}
           >
             <div className="user-avatar">
-              {activeChannel === 'wechat' && userProfile.avatarUrl
+              {wechatConfigured && userProfile.avatarUrl
                 ? <img src={userProfile.avatarUrl} alt="" />
-                : <span>{(channelUserName || 'W')[0].toUpperCase()}</span>}
+                : <span>{(primaryChannelName || 'W')[0].toUpperCase()}</span>}
             </div>
             <div className="user-meta">
               <div className="user-name">
-                {activeChannel === 'wechat' && wechatConfigured ? userProfile.displayName : channelUserName}
+                {wechatConfigured ? userProfile.displayName : primaryChannelName}
               </div>
               <div className="user-wxid">
-                {activeChannel === 'wechat' && wechatConfigured ? (userProfile.alias || userProfile.wxid) : channelUserSubtitle}
+                {wechatConfigured ? (userProfile.alias || userProfile.wxid) : channelUserSubtitle}
               </div>
             </div>
             {!collapsed && <span className={`user-menu-caret ${isAccountMenuOpen ? 'open' : ''}`}><ChevronUp size={14} /></span>}

@@ -147,11 +147,9 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
   const setChatSessions = useChatStore((state) => state.setSessions)
   const resetChatStore = useChatStore((state) => state.reset)
   const { currentTheme, themeMode, setTheme, setThemeMode } = useThemeStore()
-  const channelActiveChannel = useChannelStore(state => state.activeChannel)
   const channelEnabledChannels = useChannelStore(state => state.enabledChannels)
   const channelAvailability = useChannelStore(state => state.availability)
   const refreshChannels = useChannelStore(state => state.refresh)
-  const setChannelActive = useChannelStore(state => state.setActiveChannel)
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
@@ -2368,7 +2366,7 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
     <div className="tab-content">
       <div className="form-group">
         <label>数据渠道</label>
-        <span className="form-hint">微信与 Telegram 的连接、导入和功能入口相互独立。</span>
+        <span className="form-hint">已启用的渠道会同时显示在侧栏，可并行使用，无需切换当前渠道。</span>
       </div>
 
       <div className="channel-settings-list">
@@ -2390,15 +2388,10 @@ function SettingsPage({ onClose }: SettingsPageProps = {}) {
                 <small>{channel.desc}</small>
               </div>
               <div className="btn-row">
-                {enabled && channelActiveChannel !== channel.id && (
-                  <button className="btn btn-secondary btn-sm" onClick={() => void setChannelActive(channel.id)}>
-                    设为当前
-                  </button>
-                )}
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => void window.electronAPI.window.openOnboardingWindow({
-                    mode: enabled ? 'initial' : 'add-channel',
+                    mode: 'add-channel',
                     channel: channel.id
                   })}
                 >

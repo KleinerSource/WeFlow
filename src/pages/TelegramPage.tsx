@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, FileJson, LogOut, MessageSquare, RefreshCw, Search, Settings2, Trash2, Upload, X } from 'lucide-react'
+import { Download, File, FileJson, FolderOpen, Image as ImageIcon, LogOut, MessageCircle, MessageSquare, Music, PlayCircle, RefreshCw, Search, Settings2, Trash2, Upload, User, Users, X } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
-import type { TelegramAuthStep, TelegramMessage, TelegramProgress, TelegramSource, TelegramStatus, TelegramSyncRange } from '../../shared/telegram'
+import type { TelegramAuthStep, TelegramContact, TelegramMessage, TelegramProgress, TelegramResource, TelegramSource, TelegramStatus, TelegramSyncRange } from '../../shared/telegram'
 import './TelegramPage.scss'
 
 const api = window.electronAPI.telegram
-type View = 'chat' | 'export'
+type View = 'chat' | 'contacts' | 'resources' | 'export'
 const authLabels: Record<TelegramAuthStep, string> = { code: 'Telegram 验证码', password: '两步验证密码', email: '验证邮箱', emailCode: '邮箱验证码' }
 
 function dateLabel(seconds: number): string {
@@ -16,6 +16,23 @@ function dateInputValue(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+function resourceKindLabel(kind: string): string {
+  if (['photo', 'image'].includes(kind)) return '图片'
+  if (['video', 'video_file', 'animation'].includes(kind)) return '视频'
+  if (['audio', 'audio_file', 'voice_message'].includes(kind)) return '音频'
+  if (['file', 'document'].includes(kind)) return '文件'
+  if (kind === 'sticker') return '贴纸'
+  return kind
+}
+
+function ResourceKindIcon({ kind }: { kind: string }) {
+  if (['photo', 'image'].includes(kind)) return <ImageIcon size={30} />
+  if (['video', 'video_file', 'animation'].includes(kind)) return <PlayCircle size={30} />
+  if (['audio', 'audio_file', 'voice_message'].includes(kind)) return <Music size={30} />
+  if (kind === 'sticker') return <MessageCircle size={30} />
+  return <File size={30} />
+}
+
 function TelegramPage() {
   const [sources, setSources] = useState<TelegramSource[]>([])
   const [status, setStatus] = useState<TelegramStatus>({ connected: false, accountName: '', hasSavedSession: false, secureStorage: true, syncing: false })
@@ -23,6 +40,9 @@ function TelegramPage() {
   const [chatId, setChatId] = useState('')
   const [view, setView] = useState<View>('chat')
   const [messages, setMessages] = useState<TelegramMessage[]>([])
+  const [contacts, setContacts] = useState<TelegramContact[]>([])
+  const [resources, setResources] = useState<TelegramResource[]>([])
+  const [selectedContactId, setSelectedContactId] = useState('')
   const [query, setQuery] = useState('')
   const [revision, setRevision] = useState(0)
   const [error, setError] = useState('')
@@ -71,6 +91,24 @@ function TelegramPage() {
   }, [sourceId, chatId, revision])
 
   useEffect(() => {
+    if (!sourceId || view !== 'contacts') return
+    let cancelled = false
+    void api.contacts(sourceId).then(items => {
+      if (!cancelled) setContacts(items)
+    }).catch(cause => { if (!cancelled) setError(String(cause?.message || cause)) })
+    return () => { cancelled = true }
+  }, [sourceId, revision, view])
+
+  useEffect(() => {
+    if (!sourceId || view !== 'resources') return
+    let cancelled = false
+    void api.resources(sourceId).then(items => {
+      if (!cancelled) setResources(items)
+    }).catch(cause => { if (!cancelled) setError(String(cause?.message || cause)) })
+    return () => { cancelled = true }
+  }, [sourceId, revision, view])
+
+  useEffect(() => {
     if (sourceId !== 'live' || !chatId || !status.connected) return
     void api.loadMessages(chatId, false).catch(cause => setError(String(cause?.message || cause)))
   }, [sourceId, chatId, status.connected])
@@ -79,6 +117,10 @@ function TelegramPage() {
   const chat = source?.chats.find(item => item.id === chatId)
   const chats = useMemo(() => [...(source?.chats || [])].sort((a, b) => b.lastMessageAt - a.lastMessageAt), [source])
   const filteredChats = chats.filter(item => item.title.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+  const filteredContacts = contacts.filter(item => item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()))
+  const selectedContact = contacts.find(item => item.id === selectedContactId) || null
+  const filteredResources = resources.filter(item => [item.chatTitle, item.kind, item.sender]
+    .some(value => value.toLocaleLowerCase().includes(query.toLocaleLowerCase())))
 
   async function run(action: () => Promise<unknown>): Promise<void> {
     setError('')
@@ -154,16 +196,37 @@ function TelegramPage() {
     })
   }
 
+  const canOpenResource = (item: TelegramResource): boolean => Boolean(item.mediaPath)
+    || (sourceId === 'live' && status.connected && item.kind !== 'text' && item.kind !== 'service')
+
+  const handleResource = (item: TelegramResource) => {
+    void run(async () => {
+      const path = item.mediaPath || (sourceId === 'live' ? await api.downloadMedia(item.chatId, item.messageId) : '')
+      if (!path) return
+      const result = await window.electronAPI.shell.openPath(path)
+      if (result) throw new Error(result)
+    })
+  }
+
+  const openContactChat = (chatId: string) => {
+    setChatId(chatId)
+    setView('chat')
+  }
+
   return (
     <div className="telegram-page">
       <header className="tg-toolbar">
         <div className="tg-title">Telegram</div>
-        <select aria-label="数据源" value={sourceId} onChange={event => { setSourceId(event.target.value); setChatId('') }}>
+        <select aria-label="数据源" value={sourceId} onChange={event => {
+          setSourceId(event.target.value)
+          setChatId('')
+          setSelectedContactId('')
+        }}>
           {!sourceId && <option value="">选择数据源</option>}
           {sources.map(item => <option key={item.id} value={item.id}>{item.kind === 'account' ? '账号 · ' : '导入 · '}{item.label}</option>)}
         </select>
         <div className="tg-view-tabs" role="tablist" aria-label="Telegram 视图">
-          {([['chat', '聊天', MessageSquare], ['export', '导出', Download]] as const).map(([id, label, Icon]) => (
+          {([['chat', '聊天', MessageSquare], ['contacts', '通讯录', Users], ['resources', '资源预览', FolderOpen], ['export', '导出', Download]] as const).map(([id, label, Icon]) => (
             <button key={id} role="tab" aria-selected={view === id} className={view === id ? 'active' : ''} onClick={() => setView(id)}><Icon size={15} />{label}</button>
           ))}
         </div>
@@ -235,6 +298,77 @@ function TelegramPage() {
             </> : <div className="tg-empty">选择会话</div>}
           </section>
         </div>
+      )}
+
+      {view === 'contacts' && source && (
+        <div className="tg-contact-layout">
+          <aside className="tg-contacts">
+            <div className="tg-search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索联系人" aria-label="搜索联系人" /></div>
+            <div className="tg-contact-list">
+              {filteredContacts.map(item => (
+                <button key={item.id} className={`tg-contact-item ${item.id === selectedContact?.id ? 'active' : ''}`} onClick={() => setSelectedContactId(item.id)}>
+                  <span className="tg-avatar">{item.name.charAt(0).toUpperCase()}</span>
+                  <span className="tg-chat-meta">
+                    <strong>{item.name}</strong>
+                    <small>{item.messageCount} 条消息 · {item.chatCount} 个会话</small>
+                  </span>
+                  <span className={`tg-contact-badge ${item.outgoing ? 'self' : ''}`}>{item.outgoing ? '本机' : '联系人'}</span>
+                </button>
+              ))}
+            </div>
+          </aside>
+          <section className="tg-contact-detail">
+            {selectedContact ? <>
+              <header className="tg-contact-header">
+                <span className="tg-avatar">{selectedContact.name.charAt(0).toUpperCase()}</span>
+                <div>
+                  <strong>{selectedContact.name}</strong>
+                  <small>{selectedContact.outgoing ? '本机账号' : '消息联系人'} · {selectedContact.messageCount} 条消息</small>
+                </div>
+              </header>
+              <dl className="tg-contact-stats">
+                <div><dt>消息数</dt><dd>{selectedContact.messageCount}</dd></div>
+                <div><dt>参与会话</dt><dd>{selectedContact.chatCount}</dd></div>
+                <div><dt>最近活动</dt><dd>{selectedContact.lastActiveAt ? dateLabel(selectedContact.lastActiveAt) : '暂无'}</dd></div>
+              </dl>
+              <div className="tg-contact-chat-list">
+                <h3>相关会话</h3>
+                {selectedContact.chats.map(chat => (
+                  <button key={chat.id} onClick={() => openContactChat(chat.id)}>
+                    <MessageCircle size={17} />
+                    <span>{chat.title}</span>
+                  </button>
+                ))}
+              </div>
+            </> : <div className="tg-empty"><User size={36} /><p>选择联系人查看详情</p></div>}
+          </section>
+        </div>
+      )}
+
+      {view === 'resources' && source && (
+        <section className="tg-resources">
+          <div className="tg-section-title"><h2>资源预览</h2><span>{source.label} · 共 {resources.length} 条资源</span></div>
+          <div className="tg-resource-toolbar">
+            <div className="tg-search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索会话、类型或发送者" aria-label="搜索资源" /></div>
+          </div>
+          {filteredResources.length ? <div className="tg-resource-grid">
+            {filteredResources.map(item => {
+              const openable = canOpenResource(item)
+              return (
+                <article key={item.id} className="tg-resource-card">
+                  <div className="tg-resource-visual"><ResourceKindIcon kind={item.kind} /><span>{resourceKindLabel(item.kind)}</span></div>
+                  <div className="tg-resource-meta">
+                    <strong title={item.chatTitle}>{item.chatTitle}</strong>
+                    <small>{item.sender || '未知'} · {dateLabel(item.date)}</small>
+                  </div>
+                  <button className="tg-button" disabled={!openable || busy} onClick={() => handleResource(item)}>
+                    {item.mediaPath ? '打开' : openable ? '下载并打开' : '不可用'}
+                  </button>
+                </article>
+              )
+            })}
+          </div> : <div className="tg-empty"><FolderOpen size={36} /><p>暂无资源</p></div>}
+        </section>
       )}
 
       {view === 'export' && source && (
