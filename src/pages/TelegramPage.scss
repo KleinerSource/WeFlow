@@ -38,27 +38,6 @@
 .telegram-page button:disabled { opacity: .52; cursor: not-allowed; }
 .telegram-page :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-.tg-view-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 3px;
-  background: var(--bg-secondary);
-  border-radius: 6px;
-
-  button {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 30px;
-    padding: 0 11px;
-    border: 0;
-    border-radius: 4px;
-    background: transparent;
-    color: var(--text-secondary);
-  }
-  button.active { background: var(--bg-primary); color: var(--text-primary); box-shadow: 0 1px 3px var(--border-color); }
-}
-
 .tg-toolbar-actions { display: flex; gap: 3px; margin-left: auto; }
 .tg-icon-btn {
   flex: 0 0 34px;

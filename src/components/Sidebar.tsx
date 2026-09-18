@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  Home, MessageCircle, Send, Settings, Download, Aperture, UserCircle, Lock, LockOpen,
+  Home, MessageCircle, Settings, Download, Aperture, UserCircle, Lock, LockOpen,
   ChevronUp, FolderClosed, Footprints, ArchiveRestore
 } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import { useChannelStore } from '../stores/channelStore'
 import * as configService from '../services/config'
 import { onExportSessionStatus, requestExportSessionStatus } from '../services/exportBridge'
+import type { ChannelId } from '../../shared/channel'
 import './Sidebar.scss'
 
 interface SidebarUserProfile {
@@ -134,8 +135,8 @@ function Sidebar({ collapsed }: SidebarProps) {
   const primaryChannelName = wechatConfigured ? '微信' : telegramConfigured ? 'Telegram' : '未配置渠道'
   const channelUserSubtitle = enabledChannels.length > 0 ? `已启用 ${enabledChannels.length} 个渠道` : '请先选择渠道'
 
-  const openChannelSetup = () => {
-    void window.electronAPI.window.openOnboardingWindow({ mode: 'add-channel', channel: 'wechat' })
+  const openChannelSetup = (channel: ChannelId) => {
+    void window.electronAPI.window.openOnboardingWindow({ mode: 'add-channel', channel })
   }
 
   const openSettings = () => {
@@ -193,7 +194,7 @@ function Sidebar({ collapsed }: SidebarProps) {
                 </NavLink>
               </>
             ) : (
-              <button type="button" className="nav-item" onClick={openChannelSetup} title={collapsed ? '配置微信' : undefined}>
+              <button type="button" className="nav-item" onClick={() => openChannelSetup('wechat')} title={collapsed ? '配置微信' : undefined}>
                 <span className="nav-icon"><MessageCircle size={20} /></span>
                 <span className="nav-label">配置微信</span>
               </button>
@@ -204,10 +205,31 @@ function Sidebar({ collapsed }: SidebarProps) {
         {telegramEnabled && (
           <div className="nav-section">
             <div className="nav-section-label">Telegram</div>
-            <NavLink to="/telegram" className={`nav-item ${isActive('/telegram') ? 'active' : ''}`} title={collapsed ? 'Telegram' : undefined}>
-              <span className="nav-icon"><Send size={20} /></span>
-              <span className="nav-label">Telegram</span>
-            </NavLink>
+            {telegramConfigured ? (
+              <>
+                <NavLink to="/telegram/chat" className={`nav-item ${isActive('/telegram/chat') ? 'active' : ''}`} title={collapsed ? '聊天' : undefined}>
+                  <span className="nav-icon"><MessageCircle size={20} /></span>
+                  <span className="nav-label">聊天</span>
+                </NavLink>
+                <NavLink to="/telegram/contacts" className={`nav-item ${isActive('/telegram/contacts') ? 'active' : ''}`} title={collapsed ? '通讯录' : undefined}>
+                  <span className="nav-icon"><UserCircle size={20} /></span>
+                  <span className="nav-label">通讯录</span>
+                </NavLink>
+                <NavLink to="/telegram/resources" className={`nav-item ${isActive('/telegram/resources') ? 'active' : ''}`} title={collapsed ? '资源浏览' : undefined}>
+                  <span className="nav-icon"><FolderClosed size={20} /></span>
+                  <span className="nav-label">资源浏览</span>
+                </NavLink>
+                <NavLink to="/telegram/export" className={`nav-item ${isActive('/telegram/export') ? 'active' : ''}`} title={collapsed ? '导出' : undefined}>
+                  <span className="nav-icon"><Download size={20} /></span>
+                  <span className="nav-label">导出</span>
+                </NavLink>
+              </>
+            ) : (
+              <button type="button" className="nav-item" onClick={() => openChannelSetup('telegram')} title={collapsed ? '配置 Telegram' : undefined}>
+                <span className="nav-icon"><MessageCircle size={20} /></span>
+                <span className="nav-label">配置 Telegram</span>
+              </button>
+            )}
           </div>
         )}
       </nav>

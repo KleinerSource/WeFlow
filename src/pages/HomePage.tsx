@@ -21,7 +21,7 @@ function HomePage() {
 
   const openChannel = (channel: ChannelId) => {
     if (availability[channel].configured) {
-      navigate(channel === 'telegram' ? '/telegram' : '/chat')
+      navigate(channel === 'telegram' ? '/telegram/chat' : '/chat')
       return
     }
     openSetup('add-channel', channel)

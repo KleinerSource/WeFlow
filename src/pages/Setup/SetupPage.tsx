@@ -69,7 +69,7 @@ function SetupPage({ standalone = false }: SetupPageProps) {
       }, 450)
       return
     }
-    const route = destination === 'home' ? '/home' : destination === 'telegram' ? '/telegram' : '/chat'
+    const route = destination === 'home' ? '/home' : destination === 'telegram' ? '/telegram/chat' : '/chat'
     navigate(route)
   }
 

@@ -61,7 +61,7 @@ test('缓存按会话隔离、去重，并拒绝越界媒体路径', async () =>
   }
 })
 
-test('通讯录与资源预览按真实消息聚合', async () => {
+test('通讯录与资源浏览按真实消息聚合', async () => {
   const root = await mkdtemp(join(tmpdir(), 'weflow-telegram-views-test-'))
   try {
     const store = new TelegramStore(root)

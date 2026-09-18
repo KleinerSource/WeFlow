@@ -4022,7 +4022,7 @@ function registerIpcHandlers() {
 
       const destination = payload?.destination === 'home'
         ? '/home'
-        : (channel === 'telegram' ? '/telegram' : '/chat')
+        : (channel === 'telegram' ? '/telegram/chat' : '/chat')
       if (mainWindow && !mainWindow.isDestroyed()) {
         if (process.env.VITE_DEV_SERVER_URL) {
           await mainWindow.loadURL(`${process.env.VITE_DEV_SERVER_URL}#${destination}`)

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
-import { Routes, Route, useNavigate, useLocation, type Location } from 'react-router-dom'
+import { Navigate, Routes, Route, useNavigate, useLocation, type Location } from 'react-router-dom'
 import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import RouteGuard from './components/RouteGuard'
@@ -778,7 +778,11 @@ function App() {
                 <Route path="/home" element={<HomePage />} />
                 <Route path="/account-management" element={<AccountManagementPage />} />
                 <Route path="/chat" element={<ChatPage />} />
-                <Route path="/telegram" element={<TelegramPage />} />
+                <Route path="/telegram" element={<Navigate to="/telegram/chat" replace />} />
+                <Route path="/telegram/chat" element={<TelegramPage />} />
+                <Route path="/telegram/contacts" element={<TelegramPage />} />
+                <Route path="/telegram/resources" element={<TelegramPage />} />
+                <Route path="/telegram/export" element={<TelegramPage />} />
 
                 <Route path="/footprint" element={<MyFootprintPage />} />
 

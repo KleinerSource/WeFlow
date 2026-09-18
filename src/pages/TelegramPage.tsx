@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Download, File, FileJson, FolderOpen, Image as ImageIcon, LogOut, MessageCircle, MessageSquare, Music, PlayCircle, RefreshCw, Search, Settings2, Trash2, Upload, User, Users, X } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Download, File, FileJson, FolderOpen, Image as ImageIcon, LogOut, MessageCircle, MessageSquare, Music, PlayCircle, RefreshCw, Search, Settings2, Trash2, Upload, User, X } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 import type { TelegramAuthStep, TelegramContact, TelegramMessage, TelegramProgress, TelegramResource, TelegramSource, TelegramStatus, TelegramSyncRange } from '../../shared/telegram'
 import './TelegramPage.scss'
@@ -34,11 +35,12 @@ function ResourceKindIcon({ kind }: { kind: string }) {
 }
 
 function TelegramPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [sources, setSources] = useState<TelegramSource[]>([])
   const [status, setStatus] = useState<TelegramStatus>({ connected: false, accountName: '', hasSavedSession: false, secureStorage: true, syncing: false })
   const [sourceId, setSourceId] = useState('')
   const [chatId, setChatId] = useState('')
-  const [view, setView] = useState<View>('chat')
   const [messages, setMessages] = useState<TelegramMessage[]>([])
   const [contacts, setContacts] = useState<TelegramContact[]>([])
   const [resources, setResources] = useState<TelegramResource[]>([])
@@ -60,6 +62,13 @@ function TelegramPage() {
   const [apiHash, setApiHash] = useState('')
   const [phone, setPhone] = useState('')
   const [format, setFormat] = useState<'json' | 'csv' | 'md'>('json')
+  const view: View = location.pathname === '/telegram/contacts'
+    ? 'contacts'
+    : location.pathname === '/telegram/resources'
+      ? 'resources'
+      : location.pathname === '/telegram/export'
+        ? 'export'
+        : 'chat'
 
   useEffect(() => {
     const removeChanged = api.onChanged(() => setRevision(value => value + 1))
@@ -132,7 +141,12 @@ function TelegramPage() {
 
   const handleImport = () => run(async () => {
     const imported = await api.importJson()
-    if (imported) { setSourceId(imported); setChatId(''); setShowConnection(false); setView('chat') }
+    if (imported) {
+      setSourceId(imported)
+      setChatId('')
+      setShowConnection(false)
+      navigate('/telegram/chat')
+    }
   })
 
   const handleLogin = (event: React.FormEvent) => {
@@ -144,6 +158,7 @@ function TelegramPage() {
       setShowConnection(false)
       setSourceId('live')
       setChatId('')
+      navigate('/telegram/chat')
     })
   }
 
@@ -210,7 +225,7 @@ function TelegramPage() {
 
   const openContactChat = (chatId: string) => {
     setChatId(chatId)
-    setView('chat')
+    navigate('/telegram/chat')
   }
 
   return (
@@ -225,11 +240,6 @@ function TelegramPage() {
           {!sourceId && <option value="">选择数据源</option>}
           {sources.map(item => <option key={item.id} value={item.id}>{item.kind === 'account' ? '账号 · ' : '导入 · '}{item.label}</option>)}
         </select>
-        <div className="tg-view-tabs" role="tablist" aria-label="Telegram 视图">
-          {([['chat', '聊天', MessageSquare], ['contacts', '通讯录', Users], ['resources', '资源预览', FolderOpen], ['export', '导出', Download]] as const).map(([id, label, Icon]) => (
-            <button key={id} role="tab" aria-selected={view === id} className={view === id ? 'active' : ''} onClick={() => setView(id)}><Icon size={15} />{label}</button>
-          ))}
-        </div>
         <div className="tg-toolbar-actions">
           {source?.kind === 'import' && <button className="tg-icon-btn" title="移除导入数据" aria-label="移除导入数据" disabled={busy} onClick={handleRemoveImport}><Trash2 size={18} /></button>}
           <button className="tg-icon-btn" title="导入 Telegram JSON" aria-label="导入 Telegram JSON" disabled={busy} onClick={() => void handleImport()}><Upload size={18} /></button>
@@ -347,7 +357,7 @@ function TelegramPage() {
 
       {view === 'resources' && source && (
         <section className="tg-resources">
-          <div className="tg-section-title"><h2>资源预览</h2><span>{source.label} · 共 {resources.length} 条资源</span></div>
+          <div className="tg-section-title"><h2>资源浏览</h2><span>{source.label} · 共 {resources.length} 条资源</span></div>
           <div className="tg-resource-toolbar">
             <div className="tg-search"><Search size={16} /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索会话、类型或发送者" aria-label="搜索资源" /></div>
           </div>
